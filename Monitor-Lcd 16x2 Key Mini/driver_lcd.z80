@@ -1,0 +1,154 @@
+; Drive LCd
+; Diego Cruz - Abril 2021
+
+; Ports
+porta	= 01h
+portb	= 02h
+en	= 01h
+rw	= 02h
+rs	= 04h
+
+; Hex Code	Command to LCD instruction Register
+
+; 01	Clear display screen
+; 02	Return home
+; 04	Decrement cursor (shift cursor to left)
+; 06	Increment cursor (shift cursor to right)
+; 05	Shift display right
+; 07	Shift display left
+; 08	Display off, cursor off
+; 0A	Display off, cursor on
+; 0C	Display on, cursor off
+; 0E	Display on, cursor blinking
+; 0F	Display on, cursor blinking
+; 10	Shift cursor position to left
+; 14	Shift cursor position to right
+; 18	Shift the entire display to the left
+; 1C	Shift the entire display to the right
+; 80	Force cursor to beginning ( 1st line)
+; C0	Force cursor to beginning ( 2nd line)
+; 38	2 lines and 5×7 matrix
+
+
+;***************************************************************************
+;	lcd_print_string:
+;	Function: Print string to lcd
+;***************************************************************************
+lcd_print_string:
+	push af
+lcd_print_string_loop:
+	ld a, (HL)
+    cp 0FFh
+    jp z, lcd_print_string_end
+    ld a, (HL)
+    call lcd_send_data
+    inc HL
+    jp lcd_print_string_loop
+lcd_print_string_end:
+	pop af
+    ret
+    
+    
+;***************************************************************************
+;	lcd_print_data:
+;	Function: print byte to lcd (HEX)
+;***************************************************************************
+lcd_print_data:
+	push bc
+    push af
+    ld b, a
+    and 11110000b
+    rlca
+    rlca
+    rlca
+    rlca
+    add a, '0'
+    cp '9' + 1
+    jr c, print_12
+    add a, 'A' - '0' - 10
+print_12:
+    call lcd_send_data
+    ld a, b
+    and 00001111b
+    add a, '0'
+    cp '9' + 1
+    jr c, print_22
+    add a, 'A' - '0' - 10
+print_22:
+    call lcd_send_data  
+    pop bc
+    pop af
+    ret
+
+    
+;***************************************************************************
+;	lcd_shift_cursor_right:
+;	Function: Shift cursor position to right
+;***************************************************************************
+lcd_shift_cursor_right:
+	push af
+	ld a, 14h
+    call lcd_send_command
+	pop af
+    ret
+    
+    
+    
+;***************************************************************************
+;	lcd_clear:
+;	Function: Clear display lcd 16x2
+;***************************************************************************
+lcd_clear:
+	ld a, 01h 				; limpa lcd
+    call lcd_send_command
+    ret
+    
+    
+
+;***************************************************************************
+;	lcd_init:
+;	Function: Init display lcd 16x2
+;***************************************************************************
+lcd_init:
+	ld a, 01h 				; limpa lcd
+    call lcd_send_command
+    
+    ld a, 38h 				; Modo 8 bits
+    call lcd_send_command
+    
+    ld a, 0Eh 				; Display on, cursor blinking 
+    call lcd_send_command
+    
+    ld a, 06h 				; Increment cursor (shift cursor to right)
+    call lcd_send_command
+    ret
+    
+
+;***************************************************************************
+;	lcd_send_command:
+;	Function: Send command to lcd
+;***************************************************************************
+lcd_send_command:
+	out	(portb),a	;carrega acc no portb
+	ld	a,00h		;envia byte 00h para o acc
+	out	(porta),a	;carrega acc no porta
+    ld a, en			;envia bit de enable para o acc
+	out	(porta),a	;carrega en no porta
+    ld a, 00h			;envia byte 00h para o acc
+	out	(porta),a	;carrega acc no porta
+    ret
+    
+
+;***************************************************************************
+;	lcd_send_command:
+;	Function: Send command to lcd
+;***************************************************************************
+lcd_send_data:
+	out	(portb),a	;carrega acc no portb
+    ld a, rs			;envia bit de rs para o acc
+	out	(porta),a	;carrega acc no porta
+    ld a, en|rs		;envia bit de en com rs para o acc
+	out	(porta),a	;carrega acc no porta
+    ld a, rs		;envia bit de rs para o acc
+	out	(porta),a	;carrega acc no porta
+    ret

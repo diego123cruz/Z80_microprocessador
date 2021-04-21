@@ -1,0 +1,221 @@
+; Monitor v0.1
+; Diego Cruz - Abril 2021
+;
+;	ROM 0000h 	- 	1FFFh
+;	RAM 8000h 	- 	FFFFh
+;	
+;	STACK POINTER - EFFFh
+;
+;	VAR SYSTEM	 -	EF00h
+;
+;
+;	PORT_A 1h - in(keys) / out( lcd control b0, b1, b2)
+;	PORT_B 2h - out (lcd - data)
+;
+;	Registers
+; 	A - Geral | ROM funcs
+; 	B - func LCD
+;  	C - func LCD | Delay | 
+;	E - RAM Pointer
+; 	F - RAM Pointer
+;	H - func LCD print string
+;	L - func LCD print string
+
+; RELEASE NOTES
+;
+;	v0.2 - add functions maps | Add Botão Up to test memory ram
+; 	v0.1 - initial version
+
+
+
+;	Functions Map
+;	0006h	-	Call Delay
+;	000Ah	-	Call Clear display lcd
+; 	000Eh	-	Call Print string LCD - set start sting HL and FFh to end of string
+
+CURSOR_LCD 	= $EF00
+DATA_TO_LCD = $EF01
+TMP_CURSOR 	= $EF02
+
+START_RAM	= $8000
+END_RAM		= $EFFF
+
+.org 0
+	LD SP, END_RAM					; define stack pointer to FFFFh	
+    jp start
+    
+    ; -------------------- Functions -------------------------------------
+    call delay					    ; $0007 call delay function
+    ret
+    call lcd_clear					; $000B call clear display
+    ret
+    call lcd_print_string			; $000F call print string start in HL and with $FF
+    ret
+    call lcd_print_data				; $0013 call print data in A to LCD -> Hex ex: A=10 out to lcd = 0A
+    ret
+    call lcd_send_command			; $0017 call lcd send command A
+    ret
+    call lcd_send_data				; $002B call lcd send data A ex: A=44 out to lcd 'D'
+    ret
+    
+    
+    
+    
+    
+
+start:
+	ld a, 0							; start vars
+    ld (DATA_TO_LCD), a	
+    
+    ld a, 0
+    ld (CURSOR_LCD), a
+    
+    ld de, START_RAM				; carrege em DE a primeira pos da mem
+    
+	call lcd_init
+    
+show_message_welcome:
+	call lcd_clear					; clear lcd
+    
+    ld hl, MSG_WELCOME				; print string welcome
+    call lcd_print_string
+    
+    ld a, 0C0h						; goto to line 2
+    call lcd_send_command
+    
+    ld hl, MSG_AUTOR				; print string autor
+    call lcd_print_string
+    call delay
+    call delay
+
+start_loop:
+	in a, (porta)
+    bit 7, a						; if press esc, vai para edit mem
+    jp z, edit_menu
+    bit 4, a						; if press enter, set PC to 8000h and RUM code in RAM
+    jp z, 8000h
+    bit 0, a						; if Up, rum memory RAM test
+    jp z, test_ram
+    jp start_loop
+    
+edit_menu:
+	call lcd_clear					; clear lcd
+    
+    ld a, d							; print d from de
+    call lcd_print_data
+    
+    ld a, e							; print e from de
+    call lcd_print_data
+    	
+    ld hl, EDIT_STRING				; print test example
+    call lcd_print_string
+    
+    ld a, (de)						; print data in DATA_TO_LCD to lcd with hex converter
+    call lcd_print_data
+    
+    ld a, 0C0h						; goto to line 2
+    call lcd_send_command
+    
+	ld hl, KEYS_STRING				; print keys
+    call lcd_print_string
+
+	
+    
+    
+ajuste_pos_cursor_lcd:				; ajusta a posicao do cursor do lcd
+	ld a, 0C0h						; goto to line 2 cursor pos 0
+    call lcd_send_command
+    
+	ld a, (CURSOR_LCD)
+    ld (TMP_CURSOR), a
+ajuste_cursor:
+	ld a, (TMP_CURSOR)
+    cp 0
+	jp z, edit_loop_delay
+    dec a
+    ld (TMP_CURSOR), a
+    nop
+    call lcd_shift_cursor_right		; shift right cursor
+    nop
+    jp ajuste_cursor
+    
+edit_loop_delay:
+    call delay
+    call delay
+    
+edit_loop:							; fica lendos as teclas no modo edit
+	in a, (porta)
+    bit 0, a
+    jp z, edit_up
+    bit 1, a
+    jp z, edit_right
+    bit 2, a
+    jp z, edit_down
+    bit 3, a
+    jp z, edit_left
+    bit 4, a
+    jp z, edit_enter
+    bit 7, a
+    jp z, edit_esc
+    
+    jp edit_loop
+
+
+
+edit_up:							; action Up in edit_menu
+	inc de
+	jp edit_menu
+    
+edit_down:							; action Down in edit_menu
+	dec de
+	jp edit_menu
+    
+edit_left:							; action Left in edit_menu
+	ld a, (CURSOR_LCD)
+    dec a
+    ld (CURSOR_LCD), a
+    jp ajuste_pos_cursor_lcd
+    
+edit_right:							; action Right in edit_menu
+	ld a, (CURSOR_LCD)
+    inc a
+    ld (CURSOR_LCD), a
+    jp ajuste_pos_cursor_lcd
+    
+edit_enter:							; action Enter in edit_menu
+	ld a, (DATA_TO_LCD)
+    rlca
+    rlca
+    rlca
+    rlca
+    and 11110000b
+    ld b, a
+	ld a, (CURSOR_LCD)
+    or b
+	ld (DATA_TO_LCD), a
+    ld (de), a
+	jp edit_menu
+   
+edit_esc:							; action Right in edit_menu
+	jp show_message_welcome
+
+
+; messages
+MSG_WELCOME:
+	.db "Monitor   v0.1", 0FFh
+    
+MSG_AUTOR:
+	.db "by: Diego Cruz", 0FFh
+    
+EDIT_STRING:
+	.db "h  Data: ", 0FFh
+
+KEYS_STRING:
+	.db "0123456789ABCDEF", 0FFh
+
+
+
+; includes
+#INCLUDE "driver_lcd.z80"
+#INCLUDE "utils.z80"
+#INCLUDE "test.z80"

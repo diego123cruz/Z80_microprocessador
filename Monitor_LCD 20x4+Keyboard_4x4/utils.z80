@@ -1,0 +1,17 @@
+; Utils 
+; Diego Cruz - Abril 2021
+
+
+;***************************************************************************
+;	delay:
+;	Function: Delay with acc D
+;***************************************************************************
+
+delay:
+	push bc
+	ld c, 255
+delay_loop:
+	dec c
+    jp nz, delay_loop
+    pop bc
+    ret

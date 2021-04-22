@@ -1,0 +1,592 @@
+; Monitor v0.1
+; Diego Cruz - Abril 2021
+;
+;	ROM 0000h 	- 	1FFFh
+;	RAM 8000h 	- 	FFFFh
+;	
+;	STACK POINTER - EFFFh
+;
+;	VAR SYSTEM	 -	EF00h
+;
+;
+;	PORT_A 1h - in(keys) / out( lcd control b0, b1, b2)
+;	PORT_B 2h - out (lcd - data)
+;
+;	Registers
+; 	A - Geral | ROM funcs
+; 	B - func LCD
+;  	C - func LCD | Delay | 
+;	E - RAM Pointer
+; 	F - RAM Pointer
+;	H - func LCD print string
+;	L - func LCD print string
+
+; RELEASE NOTES
+;
+;	v0.2 - add functions maps | Add Botão Up to test memory ram
+; 	v0.1 - initial version
+
+
+
+;	Functions Map
+;	0006h	-	Call Delay
+;	000Ah	-	Call Clear display lcd
+; 	000Eh	-	Call Print string LCD - set start sting HL and FFh to end of string
+
+DATA_TO_LCD = $EF00
+TEMP_A		= $EF01
+COUNT		= $EF02
+OLD_DATA	= $EF03
+
+START_RAM	= $8000
+END_RAM		= $EFFF
+
+.org 0
+	LD SP, END_RAM					; define stack pointer to FFFFh	
+    jp start
+    
+    ; -------------------- Functions -------------------------------------
+    call delay					    ; $0006 call delay function
+    ret
+    call lcd_clear					; $000A call clear display
+    ret
+    call lcd_print_string			; $000F call print string start in HL and with $FF
+    ret
+    call lcd_print_char				; $0013 call print data in A to LCD -> Hex ex: A=10 out to lcd = 0A
+    ret
+    call lcd_send_command			; $0017 call lcd send command A
+    ret
+
+    
+start:
+	ld a, 0							; start vars
+    ld (DATA_TO_LCD), a	
+    
+    ld de, START_RAM				; carrege em DE a primeira pos da mem
+    
+	call lcd_init					; init lcd
+    
+show_version_author:
+	call lcd_clear					; clear lcd
+    
+    ld a, lcd_line2					; goto to line 2
+    call lcd_send_command
+    
+    ld hl, MSG_VERSION				; print string version
+    call lcd_print_string
+    
+    ld a, lcd_line3					; goto to line 3
+    call lcd_send_command
+    
+    ld hl, MSG_AUTOR				; print string autor
+    call lcd_print_string
+    call delay
+    call delay
+    call delay
+    call delay
+    call delay
+    call delay
+    call delay
+    call delay
+    call delay
+
+; 	================================== MAIN MENU LOOP ==============================
+show_main_menu:
+	call lcd_clear					; clear lcd
+    
+    ld a, lcd_line1					; lcd line 1
+    call lcd_send_command
+    
+    ld hl, MSG_MAIN_1				; print string
+    call lcd_print_string
+    
+    
+    ld a, lcd_line2					; lcd line 2
+    call lcd_send_command
+    
+    ld hl, MSG_MAIN_2				; print string
+    call lcd_print_string
+    
+    
+    ld a, lcd_line3					; lcd line 3
+    call lcd_send_command
+    
+    ld hl, MSG_MAIN_3				; print string
+    call lcd_print_string
+    
+    
+    ld a, lcd_line4 				; lcd line 4
+    call lcd_send_command
+    
+    ld hl, MSG_MAIN_4				; print string
+    call lcd_print_string
+    
+    call delay
+    call delay
+ 
+
+start_loop:
+	in a, (porta)
+    cp $8A
+    call z, jump_run
+    
+    in a, (porta)
+    cp $8B
+    call z, edit
+    
+    in a, (porta)
+    cp $8C
+    call z, dump
+    
+    in a, (porta)
+    cp $8D
+    call z, display_test
+    
+    jp start_loop
+    
+    
+    
+    
+;	============================ SET ADDRESS =======================================
+set_address_menu:
+	call lcd_clear
+    
+    ld a, lcd_line1
+    call lcd_send_command
+    
+    ld hl, MSG_ADDRESS
+    call lcd_print_string
+    
+    ld a, lcd_line2
+    call lcd_send_command
+    ld a, '>'
+    call lcd_send_data
+    
+    ld a, $0
+    ld (COUNT), a
+    
+    call delay
+    call delay
+    
+set_address_read_key:
+	in a, (porta)
+    bit 7, a
+    jp z, set_address_read_key
+    and $0F
+
+	call lcd_print_char4
+    call delay
+    call delay
+    call delay
+    
+    ; ajusta DE with address
+    ld (TEMP_A), a
+    ld a, d
+    rla
+    rla
+    rla
+    rla
+    and $F0
+    ld b, a
+    
+    ld a, e
+    and $F0
+    rra
+    rra
+    rra
+    rra
+    
+    or b
+    
+    ld d, a
+    
+    ld a, e
+    rla
+    rla
+    rla
+    rla
+    and $F0
+    ld b, a
+    ld a, (TEMP_A)
+    or b
+    ld e, a
+    
+    
+    ; check and atualiza count
+    ld a, (COUNT)
+    cp $03
+    jp z, set_address_show_menu
+    inc a
+    ld (COUNT), a
+    jp set_address_read_key
+    
+    ; print menu
+set_address_show_menu:
+    ld a, lcd_line4
+    call lcd_send_command
+    
+    ld hl, MSG_ADDRESS_MENU
+    call lcd_print_string
+    
+    ld a, lcd_line4
+    call lcd_send_command
+    
+    call delay
+    call delay
+    
+set_address_show_menu_loop:
+    in a, (porta)
+    bit 7, a
+    jp z, set_address_show_menu_loop
+    
+    cp $8F
+    jp z, set_address_menu
+    cp $8E
+    jp z, set_address_show_menu_end
+    jp set_address_show_menu_loop
+    
+set_address_show_menu_end:
+	ret
+    
+;	=========================== JUMP RUM PROGRAM ===================================
+jump_run:
+	call set_address_menu
+    
+    call lcd_clear
+    
+    ld a, lcd_line1					; lcd line 1
+    call lcd_send_command
+    
+	ld hl, MSG_RUNNING
+    call lcd_print_string
+    
+    ld a, d							; print d from de
+    call lcd_print_char
+    
+    ld a, e							; print e from de
+    call lcd_print_char
+    
+    ld a, lcd_line1					; lcd line 1
+    call lcd_send_command
+    
+    call delay
+    
+    ld h, d
+    ld l, e
+    jp (hl)
+    
+;	========================== EDIT ================================================
+edit:
+	call set_address_menu
+    
+edit_loop_init:
+	ld a, (de)
+    ld (OLD_DATA), a
+    
+edit_loop:
+    call lcd_clear
+    
+    ld a, lcd_line1					; lcd line 1
+    call lcd_send_command
+    
+    ; print atual address
+    ld a, d							; print d from de
+    call lcd_print_char
+    
+    ld a, e							; print e from de
+    call lcd_print_char
+    
+    ; print old data
+    ld a, ' '
+    call lcd_send_data
+    
+    ld a, '('
+    call lcd_send_data
+    
+    ld a, (OLD_DATA)
+    call lcd_print_char
+    
+    ld a, ')'
+    call lcd_send_data
+    
+    ld hl, MSG_EDIT_NEW_DATA
+    call lcd_print_string
+
+edit_clear:
+	call delay
+    call delay
+    call delay
+    
+    ld a, $0
+    ld (COUNT), a
+    
+edit_read_key:
+	in a, (porta)
+    bit 7, a
+    jp z, edit_read_key
+    
+    and $0F
+
+	call lcd_print_char4
+    call delay
+    call delay
+    call delay
+    
+    ; ajusta ADDRESS DATA with address
+    ld (TEMP_A), a
+    ld a, (de)
+    rla
+    rla
+    rla
+    rla
+    and $F0
+    ld b, a
+
+    ld a, (TEMP_A)
+    or b
+    ld (de), a
+    
+    
+    ; check and atualiza count
+    ld a, (COUNT)
+    cp $01
+    jp z, edit_show_menu_1_2
+    inc a
+    ld (COUNT), a
+    jp edit_read_key
+    
+    
+    ; print edit menu
+edit_show_menu_1_2:
+	ld a, ' '
+    call lcd_send_data
+    
+    ld a, ' '
+    call lcd_send_data
+    
+    ld a, (de)
+    call lcd_send_data
+    
+
+    ld a, lcd_line3
+    call lcd_send_command
+    
+    ld hl, MSG_EDIT_MENU1
+    call lcd_print_string
+    
+    ld a, lcd_line4
+    call lcd_send_command
+    
+    ld hl, MSG_EDIT_MENU2
+    call lcd_print_string
+    
+    call delay
+    call delay
+    
+edit_show_menu_1_2_loop:
+    in a, (porta)
+    bit 7, a
+    jp z, edit_show_menu_1_2_loop
+    
+    cp $8F
+    jp z, edit_loop			; clear
+    
+    cp $8E
+    jp z, edit_show_menu_1_2_next	; next address
+    
+    cp $8C
+    jp z, edit		; set address to edit
+    
+    cp $8D
+    jp z, edit_show_menu_1_2_exit	; exit
+    
+    
+    jp edit_show_menu_1_2_loop
+    
+edit_show_menu_1_2_next:
+	inc de
+    jp edit_loop_init
+    
+edit_show_menu_1_2_exit:
+	call delay
+    call delay
+	jp show_main_menu
+    
+    
+;	=========================== PRINT DATA IN ADDRESS WITH SPACE ====================
+print_data_address_with_space:
+	ld a, ' '
+    call lcd_send_data
+    ld a, (de)
+    call lcd_print_char
+    ret
+    
+;	========================== PRINT ADDRESS ATUAL =================================
+print_atual_address:
+	ld a, d							; print d from de
+    call lcd_print_char
+    
+    ld a, e							; print e from de
+    call lcd_print_char
+    
+    ld hl, MSG_DUMP_DOT				; print char ":"
+    call lcd_print_string
+    
+    ret 
+    
+;	========================== DUMP =================================================
+dump:
+    call set_address_menu
+    
+    
+dump_next:
+    ; clear lcd
+    call lcd_clear					; clear lcd
+    
+    ld a, lcd_line1					; lcd line 1
+    call lcd_send_command
+    
+    call print_atual_address
+    call print_data_address_with_space
+    inc de
+    call print_data_address_with_space
+    inc de
+    call print_data_address_with_space
+    inc de
+    call print_data_address_with_space
+    inc de
+    call print_data_address_with_space
+    inc de
+    
+    
+    ld a, lcd_line2					; lcd line 2
+    call lcd_send_command
+    
+    call print_atual_address
+    call print_data_address_with_space
+    inc de
+    call print_data_address_with_space
+    inc de
+    call print_data_address_with_space
+    inc de
+    call print_data_address_with_space
+    inc de
+    call print_data_address_with_space
+    inc de
+    
+    
+    ld a, lcd_line3					; lcd line 3
+    call lcd_send_command
+    
+    call print_atual_address
+    call print_data_address_with_space
+    inc de
+    call print_data_address_with_space
+    inc de
+    call print_data_address_with_space
+    inc de
+    call print_data_address_with_space
+    inc de
+    call print_data_address_with_space
+    inc de
+    
+    
+    ld a, lcd_line4					; lcd line 4 - menu
+    call lcd_send_command
+    
+    ld hl, MSG_DIMP_MENU
+    call lcd_print_string
+    
+read_key_dump:
+	in a, (porta)
+    cp $8E
+    jp z, dump_next
+    cp $8F
+    jp z, show_main_menu
+    jp read_key_dump
+    
+
+    
+;	========================== Display teste ========================================
+display_test:
+	call lcd_clear
+    ld a, 0
+display_test_loop:
+    call lcd_send_data
+    inc a
+    call delay
+    jp display_test_loop
+    
+    
+;	========================= Trata keyboard 4x4 ====================================
+trata_key:
+	call lcd_clear					; clear lcd		
+    and $0F
+    ld (TEMP_A), a
+    ld a, (DATA_TO_LCD)
+    rlca
+    rlca
+    rlca
+    rlca
+    and 11110000b
+    ld b, a
+	ld a, (TEMP_A)
+    or b
+	ld (DATA_TO_LCD), a
+    
+    ld hl, MSG_TEST_KEY				; print string welcome
+    call lcd_print_string
+    call lcd_print_char				; print d from de
+    call delay
+    call delay
+    ret
+
+
+; messages
+;	---------------------	Version ------------------------
+MSG_VERSION:
+	.db "    Monitor v2.0", $ff
+MSG_AUTOR:
+	.db "     Diego Cruz", $ff
+    
+;	--------------------	Main Menu	--------------------
+MSG_MAIN_1:
+	.db "[A] JUMP / RUN", $ff
+MSG_MAIN_2:
+	.db "[B] EDIT", $ff
+MSG_MAIN_3:
+	.db "[C] DUMP", $ff
+MSG_MAIN_4:
+	.db "[D] DISPLAY TEST", $ff
+    
+MSG_ADDRESS:
+	.db "Set Address", $ff
+MSG_ADDRESS_MENU:
+	.db "[#] CLEAR   [*] DONE", $ff
+    
+MSG_DUMP_DOT:
+	.db ":", $ff
+    
+MSG_DIMP_MENU:
+	.db "[#] EXIT    [*] NEXT", $ff
+
+MSG_RUNNING:
+	.db "RUNNING AT:   ", $ff
+    
+MSG_EDIT_NEW_DATA:
+	.db "  NEW:", $ff
+    
+MSG_EDIT_MENU1:
+	.db "[*] NEXT   [#] CLEAR", $ff
+    
+MSG_EDIT_MENU2:
+	.db "[C] WRITE   [D] EXIT", $ff
+    
+MSG_TEST_KEY:
+	.db "Test keys: ", 0FFh
+
+
+; includes
+#INCLUDE "driver_lcd.z80"
+#INCLUDE "utils.z80"
+#INCLUDE "test.z80"

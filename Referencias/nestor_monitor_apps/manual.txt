@@ -1,0 +1,70 @@
+Rotinas:
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+[TEMPO]
+Entrada:
+	A = bit do display (1, 2, 4, 8, 16, 32)
+	HL = endereco na memória do valor do display
+Saída:
+	HL incrementado
+
+Descrição: Configura o display indicado pelo bit do Acumulador e seta os segmentos da memória lida em HL, incrementa HL e espera um tempo.
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+[VARR]
+Entrada:
+	A = bit do display (1, 2, 4, 8, 16, 32) (bits 0, 1 e 2 para leitura do teclado)
+	HL = endereco na memória do valor do display
+Saida:
+	A = 0 se nenhuma tecla pressionada, bit da(s) tecla(s) caso alguma da mesma coluna em A for pressionada
+	B = não muda ou bit da(s) tecla(s) caso alguma tecla da mesma coluna em A for pressionada
+	C = cópia de A na entrada da rotina
+	D = não muda ou recebe cópia de A na entrada caso alguma tecla for pressionada
+
+Descrição: Chama TEMPO (incrementa HL), lê teclado e retorna conforme descrição acima dos registradores.
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+[REST]
+Entrada:
+	HL = endereco na memória do valor do display
+Saída:
+	HL incrementado de 6
+
+Descrição: Exibe mensagem de 6 caracteres no display apontado em HL (chama TEMPO 6 vezes)
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+[AJCOL]
+Entrada:
+	D = Bit das colunas da tecla (1, 2 ou 4)
+Saída:
+	D = (se D=1 sai 0, se D=2 sai 8, se D=4 sai 16)
+Descrição: Converte o bit vindo em D para 0 ou 8 ou 16 (porque?)
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+[AJTEC]
+Entrada:
+	B = bit da linha da tecla
+	D = fator de soma para a linha da tecla
+Saída:
+	A=B = Número da linha da tecla (0 a 7) somado com D
+Descrição: Converte o bit da tecla em B (1, 2, 4, 8...128) em índice (de 0 a 7) adicionando o valor de D
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+[FORMAT]
+Entrada:
+	A = número de 0 a 15 (10 a 15 são números hexa)
+Saída:
+	A = Valor para display representando o dígito de 0 a F em hexa passado para a rotina
+Descrição:
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+[]
+Entrada:
+
+Saída:
+
+Descrição:
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------

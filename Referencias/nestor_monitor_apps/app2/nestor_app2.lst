@@ -1,0 +1,269 @@
+Sjasm Z80 Assembler v0.42c - www.xl2s.tk             [2013.12.24 - 14:11:47]
+
+nestor_app2.asm
+Errors: 0
+
+       1   00:0000                      /*****************************
+       2   00:0000                    ~   NESTOR - aplicativo demo 2
+       3   00:0000                    ~     Revista 86 - Abril/84
+       4   00:0000                    ~   Exibe uma frase com rolagem
+       5   00:0000                    ~ 
+       6   00:0000                    ~         Digitado por
+       7   00:0000                    ~       Fábio Belavenuto
+       8   00:0000                    ~        em 12/12/2013
+       9   00:0000                    ~ 
+      10   00:0000                    ~      Compilar com SJASM
+      11   00:0000                    ~ *****************************/
+      12   00:0000                      
+      13   00:0000                      	output	app2.bin
+      14   00:0000                      	defpage	0, 2000h, *
+      15   00:0000                      	
+      16   00:0000  (00)                	page 0
+      17   00:2000                      
+      18   00:2000                      	include	"../monitor/defs.inc"
+       1.  00:2000                      
+       2.  00:2000                      /***************************************
+       3.  00:2000                    ~ 
+       4.  00:2000                    ~        PROGRAMA MONITOR NESTOR
+       5.  00:2000                    ~            NOVA ELETRONICA
+       6.  00:2000                    ~     SAO PAULO SP 01/84 MSCS/JRP
+       7.  00:2000                    ~             Digitado por
+       8.  00:2000                    ~           Fábio Belavenuto
+       9.  00:2000                    ~             em 27/11/2012
+      10.  00:2000                    ~ 
+      11.  00:2000                    ~ ***************************************/
+      12.  00:2000                      
+      13.  00:2000                      /***************************************
+      14.  00:2000                    ~ 
+      15.  00:2000                    ~  Variáveis, constantes e endereços da
+      16.  00:2000                    ~  RAM usados pelo monitor e rotinas do
+      17.  00:2000                    ~  K7 Podem ser utilizados em softwares
+      18.  00:2000                    ~  utilitários incluindo este arquivo
+      19.  00:2000                    ~ 
+      20.  00:2000                    ~ ***************************************/
+      21.  00:2000                      
+      22.  00:2000                      // Portas I/O
+      23.  00:2000  (00:0001)           PTEC		= 1
+      24.  00:2000  (00:0001)           PSEG		= 1
+      25.  00:2000  (00:0002)           PPE			= 2
+      26.  00:2000  (00:0003)           PDIG		= 3
+      27.  00:2000  (00:0004)           PPS			= 4
+      28.  00:2000                      
+      29.  00:2000                      // Constantes
+      30.  00:2000                      // Códigos das teclas (AJCOL e AJTEC)
+      31.  00:2000  (00:0000)           KEY_0		= 0
+      32.  00:2000  (00:0001)           KEY_1		= 1
+      33.  00:2000  (00:0002)           KEY_2		= 2
+      34.  00:2000  (00:0003)           KEY_3		= 3
+      35.  00:2000  (00:0004)           KEY_4		= 4
+      36.  00:2000  (00:0005)           KEY_5		= 5
+      37.  00:2000  (00:0006)           KEY_6		= 6
+      38.  00:2000  (00:0007)           KEY_7		= 7
+      39.  00:2000  (00:0008)           KEY_8		= 8
+      40.  00:2000  (00:0009)           KEY_9		= 9
+      41.  00:2000  (00:000A)           KEY_A		= 10
+      42.  00:2000  (00:000B)           KEY_B		= 11
+      43.  00:2000  (00:000C)           KEY_C		= 12
+      44.  00:2000  (00:000D)           KEY_D		= 13
+      45.  00:2000  (00:000E)           KEY_E		= 14
+      46.  00:2000  (00:000F)           KEY_F		= 15
+      47.  00:2000  (00:0010)           KEY_PERM	= 16
+      48.  00:2000  (00:0011)           KEY_LOAD	= 17
+      49.  00:2000  (00:0012)           KEY_1M		= 18
+      50.  00:2000  (00:0013)           KEY_1P		= 19
+      51.  00:2000  (00:0014)           KEY_RUN		= 20
+      52.  00:2000  (00:0015)           KEY_ER		= 21
+      53.  00:2000  (00:0016)           KEY_IV		= 22
+      54.  00:2000  (00:0017)           KEY_QUAD	= 23
+      55.  00:2000                      
+      56.  00:2000                      // Caracteres para display 7-seg
+      57.  00:2000  (00:00FF)           DIG_APAG	= 0FFh
+      58.  00:2000  (00:00C0)           DIG_0		= 0C0h
+      59.  00:2000  (00:00F9)           DIG_1		= 0F9h
+      60.  00:2000  (00:00A4)           DIG_2		= 0A4h
+      61.  00:2000  (00:00B0)           DIG_3		= 0B0h
+      62.  00:2000  (00:0099)           DIG_4		= 99h
+      63.  00:2000  (00:0092)           DIG_5		= 92h
+      64.  00:2000  (00:0082)           DIG_6		= 82h
+      65.  00:2000  (00:00F8)           DIG_7		= 0F8h
+      66.  00:2000  (00:0080)           DIG_8		= 80h
+      67.  00:2000  (00:0090)           DIG_9		= 90h
+      68.  00:2000  (00:0088)           DIG_A		= 88h
+      69.  00:2000  (00:0083)           DIG_B		= 83h
+      70.  00:2000  (00:00C6)           DIG_C		= 0C6h
+      71.  00:2000  (00:00A1)           DIG_D		= 0A1h
+      72.  00:2000  (00:0086)           DIG_E		= 86h
+      73.  00:2000  (00:008E)           DIG_F		= 8Eh
+      74.  00:2000  (00:0082)           DIG_G		= 82h
+      75.  00:2000  (00:0089)           DIG_H		= 89h
+      76.  00:2000  (00:00F9)           DIG_I		= 0F9h
+      77.  00:2000  (00:00E1)           DIG_J		= 0E1h
+      78.  00:2000  (00:00C7)           DIG_L		= 0C7h
+      79.  00:2000  (00:00C8)           DIG_N		= 0C8h
+      80.  00:2000  (00:00C0)           DIG_O		= 0C0h
+      81.  00:2000  (00:008C)           DIG_P		= 8Ch
+      82.  00:2000  (00:0098)           DIG_Q		= 98h
+      83.  00:2000  (00:00CE)           DIG_R		= 0CEh
+      84.  00:2000  (00:0092)           DIG_S		= 92h
+      85.  00:2000  (00:0087)           DIG_T		= 87h
+      86.  00:2000  (00:00C1)           DIG_U		= 0C1h
+      87.  00:2000  (00:007F)           DIG_PONTO	= 7Fh
+      88.  00:2000  (00:00B7)           DIG_IGUAL	= 0B7h
+      19   00:2000                      	include	"../monitor/nestor.inc"
+       1.  00:2000                      
+       2.  00:2000                      /***************************************
+       3.  00:2000                    ~ 
+       4.  00:2000                    ~        PROGRAMA MONITOR NESTOR
+       5.  00:2000                    ~            NOVA ELETRONICA
+       6.  00:2000                    ~     SAO PAULO S.P. 01/84 MSCS/JRP
+       7.  00:2000                    ~             Digitado por
+       8.  00:2000                    ~           Fábio Belavenuto
+       9.  00:2000                    ~             em 27/11/2012
+      10.  00:2000                    ~ 
+      11.  00:2000                    ~ ***************************************/
+      12.  00:2000                      
+      13.  00:2000                      /***************************************
+      14.  00:2000                    ~ 
+      15.  00:2000                    ~  Endereços do monitor para serem usados
+      16.  00:2000                    ~  em softwares utilitários incluindo
+      17.  00:2000                    ~  este arquivo
+      18.  00:2000                    ~ 
+      19.  00:2000                    ~ ***************************************/
+      20.  00:2000                      
+      21.  00:2000  (00:0000)           RESET		= 0000h
+      22.  00:2000  (00:0096)           VARR		= 0096h
+      23.  00:2000  (00:00A2)           REST		= 00A2h
+      24.  00:2000  (00:00AF)           TEMPO		= 00AFh
+      25.  00:2000  (00:00C3)           AJCOL		= 00C3h
+      26.  00:2000  (00:00DE)           AJTEC		= 00DEh
+      27.  00:2000  (00:0176)           DISPLAY		= 0176h
+      28.  00:2000  (00:018E)           FORMAT		= 018Eh
+      20   00:2000                      
+      21   00:2000  (00:0020)           delay	= 32
+      22   00:2000                      
+      23   00:2000                      	code @ 2000h
+      24   00:2000                      
+      25   00:2000                      inicio:
+      26   00:2000  01 1A 20            	ld		bc, mensagem		// endereco inicial buffer mensagem do display
+      27   00:2003                      L2:
+      28   00:2003  16 20               	ld		d, delay			// fixa tempo (velocidade avanco display)
+      29   00:2005  03                  	inc		bc					// avanca buffer da mensagem
+      30   00:2006  79                  	ld		a, c				// carrega A com final do buffer
+      31   00:2007  FE 30               	cp		LOW fim_msg			// compara com final da mensagem
+      32   00:2009  CA 00 20            	jp z,	inicio				// recicla, se chegou ao fim
+      33   00:200C                      L1:
+      34   00:200C  60                  	ld		h, b				// carrega HL com indicador do buffer p/ utilizar rotina de restauracao
+      35   00:200D  69                  	ld		l, c				//
+      36   00:200E  C5                  	push	bc					// salva par BC
+      37   00:200F  CD A2 00            	call	REST				// chama rotina p/ display
+      38   00:2012  C1                  	pop		bc					// restaura BC
+      39   00:2013  15                  	dec		d					// decrementa a constante de tempo
+      40   00:2014  C2 0C 20            	jp nz,	L1					// nao sendo zero, continua na mensagem
+      41   00:2017  C3 03 20            	jp		L2					// sendo zero, evolui de 1 digito
+      42   00:201A                      
+      43   00:201A                      mensagem:
+      44   00:201A  FF FF FF FF FF FF   	db		DIG_APAG, DIG_APAG, DIG_APAG, DIG_APAG, DIG_APAG, DIG_APAG	// 6 caracteres apagados
+      45   00:2020  86 C1               	db		DIG_E, DIG_U												// "EU"
+      46   00:2022  FF FF               	db		DIG_APAG, DIG_APAG											// 2 apagados
+      47   00:2024  92 C0 C1            	db		DIG_S, DIG_O, DIG_U											// "SOU"
+      48   00:2027  FF FF               	db		DIG_APAG, DIG_APAG											// 2 apagados
+      49   00:2029  C8 86 92 87 C0 CE   	db		DIG_N, DIG_E, DIG_S, DIG_T, DIG_O, DIG_R					// "NESTOR"
+      50   00:202F  FF                  	db		DIG_APAG
+      51   00:2030                      fim_msg:
+      52   00:2030  FF FF FF FF FF      	db		DIG_APAG, DIG_APAG, DIG_APAG, DIG_APAG, DIG_APAG			// 1 + 5 = 6 apagados
+
+    LABELS
+-------------------------------------------------
+00:00000001 X PTEC
+00:00000001 X PSEG
+00:00000002 X PPE
+00:00000003 X PDIG
+00:00000004 X PPS
+00:00000000 X KEY_0
+00:00000001 X KEY_1
+00:00000002 X KEY_2
+00:00000003 X KEY_3
+00:00000004 X KEY_4
+00:00000005 X KEY_5
+00:00000006 X KEY_6
+00:00000007 X KEY_7
+00:00000008 X KEY_8
+00:00000009 X KEY_9
+00:0000000A X KEY_A
+00:0000000B X KEY_B
+00:0000000C X KEY_C
+00:0000000D X KEY_D
+00:0000000E X KEY_E
+00:0000000F X KEY_F
+00:00000010 X KEY_PERM
+00:00000011 X KEY_LOAD
+00:00000012 X KEY_1M
+00:00000013 X KEY_1P
+00:00000014 X KEY_RUN
+00:00000015 X KEY_ER
+00:00000016 X KEY_IV
+00:00000017 X KEY_QUAD
+00:000000FF   DIG_APAG
+00:000000C0 X DIG_0
+00:000000F9 X DIG_1
+00:000000A4 X DIG_2
+00:000000B0 X DIG_3
+00:00000099 X DIG_4
+00:00000092 X DIG_5
+00:00000082 X DIG_6
+00:000000F8 X DIG_7
+00:00000080 X DIG_8
+00:00000090 X DIG_9
+00:00000088 X DIG_A
+00:00000083 X DIG_B
+00:000000C6 X DIG_C
+00:000000A1 X DIG_D
+00:00000086   DIG_E
+00:0000008E X DIG_F
+00:00000082 X DIG_G
+00:00000089 X DIG_H
+00:000000F9 X DIG_I
+00:000000E1 X DIG_J
+00:000000C7 X DIG_L
+00:000000C8   DIG_N
+00:000000C0   DIG_O
+00:0000008C X DIG_P
+00:00000098 X DIG_Q
+00:000000CE   DIG_R
+00:00000092   DIG_S
+00:00000087   DIG_T
+00:000000C1   DIG_U
+00:0000007F X DIG_PONTO
+00:000000B7 X DIG_IGUAL
+00:00000000 X RESET
+00:00000096 X VARR
+00:000000A2   REST
+00:000000AF X TEMPO
+00:000000C3 X AJCOL
+00:000000DE X AJTEC
+00:00000176 X DISPLAY
+00:0000018E X FORMAT
+00:00000020   delay
+00:00002000   inicio
+00:00002003   L2
+00:0000200C   L1
+00:0000201A   mensagem
+00:00002030   fim_msg
+
+
+ Output: nestor_app2.out
+-------------------------------------------------
+
+ Page: 00
+  Org: 00000000  Size: *  Used: 00000000
+
+    No output
+
+ Output: app2.bin
+-------------------------------------------------
+
+ Page: 00
+  Org: 00002000  Size: *  Used: 00000035
+
+   Address   Length Align   Label
+   00002000      53     @   inicio

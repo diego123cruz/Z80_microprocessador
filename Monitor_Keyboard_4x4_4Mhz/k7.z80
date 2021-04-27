@@ -1,0 +1,311 @@
+;
+; Save RAM to tape - audio
+; Diego Abril 2021
+;
+
+;/* Constantes e posicoes da RAM */
+ZERO2K		= 8
+ZERO1K		= 2
+UM2K		= 4
+UM1K		= 4
+PERIOP		= 66
+V1KHZ		= 9Ah
+V2KHZ		= 40h
+ATRASO		= 0100h
+
+
+; End RAM
+;BUF			= 9B50h
+;BUFT		= 9B57h
+
+BUF			= $EE00
+BUFT		= $EE07
+
+;
+; ROTINA DE GRAVA«√O DE FITA
+;
+save_tape:
+GFITA:
+		call lcd_clear
+        ld hl, TITULO
+        call lcd_print_string
+       	ld a, (BUF)
+        call lcd_print_char
+        ld a, (BUF+1)
+        call lcd_print_char
+        
+		call	CBYTES					;// calcular checksum
+		jp		c, MERRO				;// se houve erro (endF < endI) exibimos no display 
+		ld		(BUF+6), a				;// colocamos checksum no cabecalho
+		ld		hl, 4000				;// 4 segundos
+		call	GE1KHZ					;// geramos 4 segs. de 1KHz
+		ld		hl, BUF					;// HL aponta para o cabecalho
+		ld		bc, 7					;// sao 7 bytes de cabecalho
+		call	SAFITA					;// geramos os 7 bytes
+		ld		hl, 2000				;// 2 segundos
+		call	GE2KHZ					;// geramos 2 segs. de 2KHz
+		call	PARAM					;// calculamos de novo os parametros. HL aponta para dados,
+		call	SAFITA					;// BC tem o tamanho dos dados, geramos os BC bytes para a fita
+		ld		hl, 4000				;// 4 segundos
+		call	GE2KHZ					;// terminamos com 4 segs. de tom 2KHz
+		jp		MFIM_SAVE			    ;// e acabou
+;
+; ROTINA CALC. NUMERO DE BYTES
+;
+CBYTES:
+		call	PARAM					;// vamos calcular os parametros
+		ret		c						;// se end. final for menor que end. inicial deu erro, retornamos
+		xor		a						;// zeramos A
+SOMA:
+		add		a, (hl)					;// somamos um byte
+		cpi								;// incrementa HL e decrementa BC
+		jp		pe, SOMA				;// se ainda nao acabou, voltamos para o loop
+		or		a						;// zeramos carry
+		ret								;// A contem o checksum
+;
+; ROTINA CALC. PARAMETROS
+;
+PARAM:
+		ld		hl, BUF+2				;// aponta para end. inicial
+		ld		e, (hl)					;// End. inicial (low)
+		inc		hl
+		ld		d, (hl)					;// End. inicial (high)
+		inc		hl
+		ld		c, (hl)					;// End. final (low)
+		inc		hl
+		ld		h, (hl)					;// End. final (high)
+		ld		l, c
+		or		a
+		sbc		hl, de					;// DE = end. inicial, HL = end. final
+		ld		c, l
+		ld		b, h
+		inc		bc						;// BC = comprimento dos dados
+		ex		de, hl					;// HL = end. inicial, DE = end. final
+		ret								;// se DE < HL sai com carry=1 (condicao de erro)
+;
+; ROTINA DE SAIDA PARA A FITA
+;
+SAFITA:
+		ld		e, (hl)					;// pegamos um byte dos dados
+		call	SABYTE					;// geramos os bits para a fita
+		cpi								;// incrementa HL e decrementa BC
+		jp		pe, SAFITA				;// se ainda nao acabou, retornamos ao loop
+		ret								;// acabou, voltamos
+;
+; ROTINA DE SAIDA DE BYTES
+;
+SABYTE:
+		ld		d, 8					;// vamos gerar 8 bits
+		or		a						;// bit de start eh 0
+		call	SAIBIT					;// geramos bit de start
+LOOPC1:
+		rr		e						;// vamos enviar o bit LSB primeiro
+		call	SAIBIT					;// geramos ele
+		dec		d						;// se ainda nao gerou os 8 bits do byte,
+		jr		nz, LOOPC1				;// volta ao loop
+		scf								;// bit de stop eh 1
+		call	SAIBIT					;// geramos bit de stop
+		ret								;// acabou, voltamos
+;
+; ROTINA DE SAIDA DE BITS
+;
+SAIBIT:
+		exx								;// salva registradores
+		ld		h, 0					;// zera H
+		jr		c, SAI1					;// se bit a ser gerado for 1, pulamos
+SAI0:
+		ld		l, ZERO2K				;// gerar bit 0: 8 ciclos de 2KHz
+		call	GE2KHZ
+		ld		l, ZERO1K				;// e 2 ciclos de 1KHz
+		jr		FINAL2					;// pulamos
+SAI1:
+		ld		l, UM2K					;// gerar bit 1: 4 ciclos de 2KHz
+		call	GE2KHZ
+		ld		l, UM1K					;// e 4 ciclos de 1KHz
+FINAL2:
+		call	GE1KHZ					;// geramos o sinal de 1KHz
+		exx								;// restauramos regs.
+		ret								;// acabou, retorna
+;
+; ROTINA DE GERACAO DE TONS
+;
+GE1KHZ:
+		ld		c, V1KHZ				;// gerar tom de 1KHz
+		jr		TOM
+GE2KHZ:
+		ld		c, V2KHZ				;// gerar tom de 2KHz
+TOM:
+		add		hl, hl					;// duplicamos a quantidade de ciclos para termos
+		ld		de, 1					;// a quantidade de semiciclos
+		ld		a, 0FFh					;// enviamos primeiro semiciclo positivo (PE0 = 1)
+QUAD:
+		out		(2), a					;// setamos Porta saida 2
+		ld		b, c					;// B contem delay que estava em C
+		djnz	$						;// esperamos o tempo do delay
+		xor		1						;// invertemos PE0 para gerar proximo semiciclo
+		sbc		hl, de					;// decrementamos contador de semiciclos
+		jr		nz, QUAD				;// ainda nao acabou de gerar a quantidade de ciclos
+		ret								;// agora acabou, voltamos
+        
+        
+        
+        
+        
+        
+;
+; ROTINA DE LEITURA DE FITA
+;
+load_tape:
+LFITA:
+		call lcd_clear
+		ld		hl, (BUF)				;// HL contem titulo
+		ld		(BUFT), hl				;// salvamos titulo em BUFT
+COND1:
+		ld		hl, 1000				;// contador do pulso de sincronismo, pelo menos 1 segundo estavel
+COND2:
+		call	PERIOD					;// Mede tamanho do ciclo
+		jr		c, COND1				;// nao eh tom de 1KHz, voltamos ao inicio
+		dec		hl						;// temos um tom de 1KHz, decrementamos contador do sincronismo
+		ld		a, h					;// testamos se contador chegou a zero
+		or		l						;//
+		jr		nz, COND2				;// enquanto nao zeramos contador de sinc., volta ao loop
+COND3:
+		call	PERIOD					;// aqui temos 1 segundo de sinc. 1KHz estavel
+		jr		nc, COND3				;// esperamos o restante do sincronismo
+		ld		hl, BUF					;// apontamos para o BUF
+		ld		bc, 7					;// 7 bytes do cabecalho
+		call	ENFITA					;// lemos os 7 bytes do cabecalho em BUF
+		jr		c, COND1				;// se houve erro voltamos a estaca zero
+        
+        
+        call lcd_clear
+        ld hl, TITULO
+        call lcd_print_string
+        
+        ld a, (BUF+1)
+        call lcd_print_char
+        ld a, (BUF)
+        call lcd_print_char
+LOOP2:
+		djnz	LOOP2					;// enquanto o delay nao acabar, atualizamos o display
+		ld		hl, (BUFT)
+		nop
+        
+		or		a
+		      
+		call	PARAM					;// calcula parametros
+		jp		c, MERRO				;// se houve erro no cabecalho mostramos erro
+		call	ENFITA					;// ler dados da fita
+		jp		c, MERRO				;// mostra mensagem se houve erro
+		call	CBYTES					;// calcula checksum
+		ld		hl, BUF+6				;// pega checksum do cabecalho
+		cp		(hl)					;// compara
+		jp		nz, MERRO				;// se checksum nao bateu, mostramos erro
+		jp		MFIM					;// leitura concluida!!
+;
+; ROTINA DE GERACAO DE PERIODOS
+;
+PERIOD:
+		ld		de, 0					;// Contador de ciclos
+LOOP3:
+		in		a, (2)				    ;// le porta K7 (bit 0)
+		inc		de						;// incrementa contador
+		rr		a						;// joga bit lido (bit 0) para o carry
+		jr		c, LOOP3				;// enquanto estiver recebendo 1 volta
+		ld		a, 00h					;// envia 0 para o auto-falante de monitoramento
+		out		(2), a					;// 
+LOOP4:
+		in		a, (2)				    ;// le porta K7 (bit 0)
+		inc		de						;// incrementa contador
+		rr		a						;// joga bit lido (bit 0) para o carry
+		jr		nc, LOOP4				;// enquanto estiver recebendo 0 volta
+		ld		a, 0FFh					;// envia 1 para o auto-falante de monitoramento
+		out		(2), a					;// 
+		ld		a, e					;// testamos E (parte baixa contador)
+		cp		PERIOP					;// compara com limiar entre 1KHz e 2KHz?
+		ret  
+;
+; ROTINA DE ENTRADA DE FITA
+;
+ENFITA:
+		xor		a						;// zera A
+		ex		af, af'					;// salva A
+LOOP5:
+		call	LEBYTE					;// lemos 1 byte
+		ld		(hl), e					;// salvamos em (hl)
+		cpi								;// incrementa HL e decrementa BC
+		jp		pe, LOOP5				;// enquanto BC n„o for -1, voltamos para o loop
+		ex		af, af'					;// recupera A (que agora esta em 0)
+		ret
+;
+; ROTINA DE LEITURA DE BYTES
+;
+LEBYTE:
+		call	LEBIT					;// lemos o bit de start (0)
+		ld		d, 8					;// vamos ler 8 bits
+LOOP6:
+		call	LEBIT					;// ler o bit (vem no carry)
+		rr		e						;// rotacionamos para o MSB do reg. E
+		dec		d						;// decrementa contador de bits
+		jr		nz, LOOP6				;// se ainda nao acabou de ler os 8 bits volta para o loop
+		call	LEBIT					;// lemos o bit de stop (1)
+		ret
+;
+; ROTINA DE LEITURA DE BITS
+;
+LEBIT:
+		exx								;// salvamos os registradores
+		ld		hl, 0					;// contador do que?
+LOOP7:
+		call	PERIOD					;// calculamos o tamanho do ciclo, carry indica se È 1KHz (C=0) ou 2KHz (C=1)
+;//		inc		d						;// porque incrementa D?
+;//		jr		nz, ERROT				;// altera a flag C tambem? tirei por dar erro
+		jr		c, PERR					;// se for 2KHz pula
+		dec		l						;// temos um pulso de 1KHz
+		dec		l						;// decrementamos L duas vezes
+		set 	0, h					;// e setamos bit 0 do reg. H
+		jr		LOOP7					;// voltamos ao loop
+PERR:
+		inc		l						;// temos um pulso de 2KHz, incrementamos L
+		bit		0, h					;// testamos se bit 0 do reg. H ja foi setado
+		jr		z, LOOP7				;// se nao foi setado, voltamos ao loop
+		rl		l						;// se o bit lido for 0 (8 ciclos 2KHz e 2 ciclos 1KHz) teremos L = 4
+		exx								;// se o bit lido for 1 (4 ciclos 2KHz e 4 ciclos 1KHz) teremos L= -4
+		ret								;// entao carry sai 0 se bit for 0 ou carry sai 1 se bit for 1 (restauramos os regs.)
+        
+        
+        
+        
+        
+;
+; ROTINA DE ERRO DE TRANSMISSAO
+;
+MERRO:
+		call lcd_clear
+        
+		ld		hl, ERRO				; houve erro, exibimos a mensagem no display
+		call	lcd_print_string		; eternamente
+		halt
+        
+MFIM:
+		call lcd_clear
+		ld		hl, FIM					; acabou o procedimento, exibimos "FIN" no display
+		call	lcd_print_string		; eternamente
+		halt
+        
+MFIM_SAVE:
+		call lcd_clear
+        ld hl, FIM_SAVE
+
+ERRO:		
+	.db	"  ...: ERROR :...", $FF
+FIM:		
+	.db "..: LOAD SUCCESS :..", $FF
+    
+FIM_SAVE:		
+	.db "..: SAVE SUCCESS :..", $FF
+    
+TITULO:	
+	.db "PROGRAM TITLE: ", $ff
+
+        

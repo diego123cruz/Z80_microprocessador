@@ -2,6 +2,11 @@
 ; Save RAM to tape - audio
 ; Diego Abril 2021
 ;
+TAPE_ADDRESS = $07D0 ; 2000 em decimal - Arduino Prog
+
+TEMP_A		= $EF01
+COUNT		= $EF02
+
 
 ;/* Constantes e posicoes da RAM */
 ZERO2K		= 8
@@ -21,6 +26,507 @@ ATRASO		= 0100h
 BUF			= $EE00
 BUFT		= $EE07
 
+
+.org TAPE_ADDRESS
+
+
+;
+; MENU TAPE
+;
+	; ----------- print title ----------
+	call lcd_clear
+    ld hl, MENU_TITLE
+    call lcd_print_string
+
+	; ----------- print menu -----------
+    ld a, lcd_line3
+    call lcd_send_command
+    
+    ld hl, MENU_LOAD
+    call lcd_print_string
+    
+    ld a, lcd_line4
+    call lcd_send_command
+    
+    ld hl, MENU_SAVE
+    call lcd_print_string
+
+menu_tape_loop:
+	in a, (porta)
+    cp $8A
+    call z, load_tape
+    
+    in a, (porta)
+    cp $8B
+    call z, pre_save_tape
+    
+    jp menu_tape_loop
+
+;==========================================
+
+pre_save_tape:
+	call set_title
+    call set_start
+    call set_end
+    call save_tape
+    
+; ================== SET TITLE ============
+set_title:
+	call lcd_clear
+    
+    ld a, lcd_line1
+    call lcd_send_command
+    
+    ld hl, MSG_ADDRESS_TITLE
+    call lcd_print_string
+    
+    ld a, lcd_line2
+    call lcd_send_command
+    ld a, '>'
+    call lcd_send_data
+    
+    ld a, $0
+    ld (COUNT), a
+    
+    call delay
+    call delay
+    call delay
+    call delay
+    
+set_address_read_key_title:
+	in a, (porta)
+    bit 7, a
+    jp z, set_address_read_key_title
+    and $0F
+
+	call lcd_print_char4
+    call delay
+    call delay
+    call delay
+    
+    ; ajusta DE with address
+    ld (TEMP_A), a
+    ld a, d
+    rla
+    rla
+    rla
+    rla
+    and $F0
+    ld b, a
+    
+    ld a, e
+    and $F0
+    rra
+    rra
+    rra
+    rra
+    
+    or b
+    
+    ld d, a
+    
+    ld a, e
+    rla
+    rla
+    rla
+    rla
+    and $F0
+    ld b, a
+    ld a, (TEMP_A)
+    or b
+    ld e, a
+    
+    
+    ; check and atualiza count
+    ld a, (COUNT)
+    cp $03
+    jp z, set_address_show_menu_title
+    inc a
+    ld (COUNT), a
+    jp set_address_read_key_title
+    
+    ; print menu
+set_address_show_menu_title:
+    ld a, lcd_line4
+    call lcd_send_command
+    
+    ld hl, MSG_ADDRESS_MENU
+    call lcd_print_string
+    
+    ld a, lcd_line4
+    call lcd_send_command
+    
+    call delay
+    call delay
+    
+set_address_show_menu_loop_title:
+    in a, (porta)
+    bit 7, a
+    jp z, set_address_show_menu_loop_title
+    
+    cp $8F
+    jp z, set_title
+    cp $8E
+    jp z, set_address_show_menu_end_title
+    jp set_address_show_menu_loop_title
+    
+set_address_show_menu_end_title:
+	ld a, e
+    ld ($EE00), a
+    
+    ld a, d
+    ld ($EE01), a
+	ret
+
+
+; ================== SET START ============
+set_start:
+	call lcd_clear
+    
+    ld a, lcd_line1
+    call lcd_send_command
+    
+    ld hl, MSG_ADDRESS_START
+    call lcd_print_string
+    
+    ld a, lcd_line2
+    call lcd_send_command
+    ld a, '>'
+    call lcd_send_data
+    
+    ld a, $0
+    ld (COUNT), a
+    
+    call delay
+    call delay
+    call delay
+    call delay
+    
+set_address_read_key_start:
+	in a, (porta)
+    bit 7, a
+    jp z, set_address_read_key_start
+    and $0F
+
+	call lcd_print_char4
+    call delay
+    call delay
+    call delay
+    
+    ; ajusta DE with address
+    ld (TEMP_A), a
+    ld a, d
+    rla
+    rla
+    rla
+    rla
+    and $F0
+    ld b, a
+    
+    ld a, e
+    and $F0
+    rra
+    rra
+    rra
+    rra
+    
+    or b
+    
+    ld d, a
+    
+    ld a, e
+    rla
+    rla
+    rla
+    rla
+    and $F0
+    ld b, a
+    ld a, (TEMP_A)
+    or b
+    ld e, a
+    
+    
+    ; check and atualiza count
+    ld a, (COUNT)
+    cp $03
+    jp z, set_address_show_menu_start
+    inc a
+    ld (COUNT), a
+    jp set_address_read_key_start
+    
+    ; print menu
+set_address_show_menu_start:
+    ld a, lcd_line4
+    call lcd_send_command
+    
+    ld hl, MSG_ADDRESS_MENU
+    call lcd_print_string
+    
+    ld a, lcd_line4
+    call lcd_send_command
+    
+    call delay
+    call delay
+    
+set_address_show_menu_loop_start:
+    in a, (porta)
+    bit 7, a
+    jp z, set_address_show_menu_loop_start
+    
+    cp $8F
+    jp z, set_start
+    cp $8E
+    jp z, set_address_show_menu_end_start
+    jp set_address_show_menu_loop_start
+    
+set_address_show_menu_end_start:
+	ld a, e
+    ld ($EE02), a
+    
+    ld a, d
+    ld ($EE03), a
+	ret
+    
+    ; ================== SET END ============
+set_end:
+	call lcd_clear
+    
+    ld a, lcd_line1
+    call lcd_send_command
+    
+    ld hl, MSG_ADDRESS_END
+    call lcd_print_string
+    
+    ld a, lcd_line2
+    call lcd_send_command
+    ld a, '>'
+    call lcd_send_data
+    
+    ld a, $0
+    ld (COUNT), a
+    
+    call delay
+    call delay
+    call delay
+    call delay
+    
+set_address_read_key_end:
+	in a, (porta)
+    bit 7, a
+    jp z, set_address_read_key_end
+    and $0F
+
+	call lcd_print_char4
+    call delay
+    call delay
+    call delay
+    
+    ; ajusta DE with address
+    ld (TEMP_A), a
+    ld a, d
+    rla
+    rla
+    rla
+    rla
+    and $F0
+    ld b, a
+    
+    ld a, e
+    and $F0
+    rra
+    rra
+    rra
+    rra
+    
+    or b
+    
+    ld d, a
+    
+    ld a, e
+    rla
+    rla
+    rla
+    rla
+    and $F0
+    ld b, a
+    ld a, (TEMP_A)
+    or b
+    ld e, a
+    
+    
+    ; check and atualiza count
+    ld a, (COUNT)
+    cp $03
+    jp z, set_address_show_menu_print_end
+    inc a
+    ld (COUNT), a
+    jp set_address_read_key_end
+    
+    ; print menu
+set_address_show_menu_print_end:
+    ld a, lcd_line4
+    call lcd_send_command
+    
+    ld hl, MSG_ADDRESS_MENU
+    call lcd_print_string
+    
+    ld a, lcd_line4
+    call lcd_send_command
+    
+    call delay
+    call delay
+    
+set_address_show_menu_loop_end:
+    in a, (porta)
+    bit 7, a
+    jp z, set_address_show_menu_loop_end
+    
+    cp $8F
+    jp z, set_end
+    cp $8E
+    jp z, set_address_show_menu_end_end
+    jp set_address_show_menu_loop_end
+    
+set_address_show_menu_end_end:
+	ld a, e
+    ld ($EE04), a
+    
+    ld a, d
+    ld ($EE05), a
+	ret
+
+;	============================ SET ADDRESS =======================================
+set_address_menu:
+	call lcd_clear
+    
+    ld a, lcd_line1
+    call lcd_send_command
+    
+    ld hl, MSG_ADDRESS
+    call lcd_print_string
+    
+    ld a, lcd_line2
+    call lcd_send_command
+    ld a, '>'
+    call lcd_send_data
+    
+    ld a, $0
+    ld (COUNT), a
+    
+    call delay
+    call delay
+    call delay
+    call delay
+    
+set_address_read_key:
+	in a, (porta)
+    bit 7, a
+    jp z, set_address_read_key
+    and $0F
+
+	call lcd_print_char4
+    call delay
+    call delay
+    call delay
+    
+    ; ajusta DE with address
+    ld (TEMP_A), a
+    ld a, d
+    rla
+    rla
+    rla
+    rla
+    and $F0
+    ld b, a
+    
+    ld a, e
+    and $F0
+    rra
+    rra
+    rra
+    rra
+    
+    or b
+    
+    ld d, a
+    
+    ld a, e
+    rla
+    rla
+    rla
+    rla
+    and $F0
+    ld b, a
+    ld a, (TEMP_A)
+    or b
+    ld e, a
+    
+    
+    ; check and atualiza count
+    ld a, (COUNT)
+    cp $03
+    jp z, set_address_show_menu
+    inc a
+    ld (COUNT), a
+    jp set_address_read_key
+    
+    ; print menu
+set_address_show_menu:
+    ld a, lcd_line4
+    call lcd_send_command
+    
+    ld hl, MSG_ADDRESS_MENU
+    call lcd_print_string
+    
+    ld a, lcd_line4
+    call lcd_send_command
+    
+    call delay
+    call delay
+    
+set_address_show_menu_loop:
+    in a, (porta)
+    bit 7, a
+    jp z, set_address_show_menu_loop
+    
+    cp $8F
+    jp z, set_address_menu
+    cp $8E
+    jp z, set_address_show_menu_end
+    jp set_address_show_menu_loop
+    
+set_address_show_menu_end:
+	ret
+    
+;	=========================== JUMP RUM PROGRAM ===================================
+jump_run:
+	call set_address_menu
+    
+    call lcd_clear
+    
+    ld a, lcd_line1					; lcd line 1
+    call lcd_send_command
+    
+	ld hl, MSG_RUNNING
+    call lcd_print_string
+    
+    ld a, d							; print d from de
+    call lcd_print_char
+    
+    ld a, e							; print e from de
+    call lcd_print_char
+    
+    ld a, lcd_line1					; lcd line 1
+    call lcd_send_command
+    
+    call delay
+    
+    ld h, d
+    ld l, e
+    jp (hl)
+
+
+
 ;
 ; ROTINA DE GRAVA«√O DE FITA
 ;
@@ -29,9 +535,9 @@ GFITA:
 		call lcd_clear
         ld hl, TITULO
         call lcd_print_string
-       	ld a, (BUF)
+       	ld a, (BUF+1)
         call lcd_print_char
-        ld a, (BUF+1)
+        ld a, (BUF)
         call lcd_print_char
         
 		call	CBYTES					;// calcular checksum
@@ -152,12 +658,20 @@ QUAD:
         
         
         
+        
+        
+        
+        
 ;
 ; ROTINA DE LEITURA DE FITA
 ;
 load_tape:
 LFITA:
 		call lcd_clear
+        ld hl, MSG_WAIT
+        call lcd_print_string
+        
+        
 		ld		hl, (BUF)				;// HL contem titulo
 		ld		(BUFT), hl				;// salvamos titulo em BUFT
 COND1:
@@ -178,7 +692,8 @@ COND3:
 		jr		c, COND1				;// se houve erro voltamos a estaca zero
         
         
-        call lcd_clear
+        ld a, lcd_line3					; lcd line 3
+    	call lcd_send_command
         ld hl, TITULO
         call lcd_print_string
         
@@ -291,21 +806,82 @@ MFIM:
 		call lcd_clear
 		ld		hl, FIM					; acabou o procedimento, exibimos "FIN" no display
 		call	lcd_print_string		; eternamente
-		halt
+        
+    	ld a, lcd_line4
+   		call lcd_send_command
+    
+    	ld hl, MSG_k7_MENU
+    	call lcd_print_string
+    
+    	call delay
+    	call delay
+    
+k7_menu_1_loop:
+    in a, (porta)
+    bit 7, a
+    jp z, k7_menu_1_loop
+    
+    cp $8E
+    jp z, jump_run		; run
+    
+    cp $8F
+    jp z, k7_menu_1_exit	; exit
+    
+    jp k7_menu_1_loop
+    
+k7_menu_1_exit:
+	call delay
+    call delay
+	jp 0 ; inicio
+    
         
 MFIM_SAVE:
 		call lcd_clear
         ld hl, FIM_SAVE
+        call	lcd_print_string
+        halt
+
+MSG_WAIT:
+	.db "Waiting...", $FF
 
 ERRO:		
 	.db	"  ...: ERROR :...", $FF
 FIM:		
 	.db "..: LOAD SUCCESS :..", $FF
     
+MSG_k7_MENU:
+	.db "[#] EXIT     [*] RUN", $ff
+    
 FIM_SAVE:		
 	.db "..: SAVE SUCCESS :..", $FF
     
 TITULO:	
 	.db "PROGRAM TITLE: ", $ff
-
+    
+MENU_TITLE:
+	.db "     .: TAPE :.", $ff
+MENU_LOAD:
+	.db "[A] LOAD", $ff
+MENU_SAVE:
+	.db "[B] SAVE", $ff
+    
+MSG_ADDRESS:
+	.db "Set Address", $ff
+MSG_ADDRESS_MENU:
+	.db "[#] CLEAR   [*] DONE", $ff
+    
+MSG_RUNNING:
+	.db "RUNNING...    ", $ff
+    
+MSG_ADDRESS_TITLE:
+	.db "Set title", $ff
+MSG_ADDRESS_START:
+	.db "Start Address", $ff
+MSG_ADDRESS_END:
+	.db "End Address", $ff
+    
+    
+; includes
+#INCLUDE "driver_lcd.z80"
+#INCLUDE "utils.z80"
         

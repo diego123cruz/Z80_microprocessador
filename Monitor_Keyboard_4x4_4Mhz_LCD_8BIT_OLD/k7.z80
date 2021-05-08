@@ -6,7 +6,6 @@ TAPE_ADDRESS = $07D0 ; 2000 em decimal - Arduino Prog
 
 TEMP_A		= $EF01
 COUNT		= $EF02
-LCD_A		= $EF13
 
 
 ;/* Constantes e posicoes da RAM */
@@ -646,7 +645,7 @@ TOM:
 		ld		de, 1					;// a quantidade de semiciclos
 		ld		a, 0FFh					;// enviamos primeiro semiciclo positivo (PE0 = 1)
 QUAD:
-		out		(2), a					;// setamos Porta saida 1
+		out		(2), a					;// setamos Porta saida 2
 		ld		b, c					;// B contem delay que estava em C
 		djnz	$						;// esperamos o tempo do delay
 		xor		1						;// invertemos PE0 para gerar proximo semiciclo

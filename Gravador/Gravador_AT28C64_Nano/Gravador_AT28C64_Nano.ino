@@ -26,6 +26,16 @@
 #define    led_red        A0    // led status - erasing
 
 
+
+
+
+int MEM_ORG = 2000; // .org in decimal
+
+
+
+
+
+
 // AT28C64 - Total: 8191
 #define sizeToErase 500
 
@@ -46,6 +56,8 @@ void eraseEEPROM();                         //função para apagar EEPROM
 // --- Configurações Iniciais ---
 void setup() 
 {
+   delay(15000); // REMOVER E COLOCAR UM PUSH BUTTON
+    
    pinMode(shift_latch, OUTPUT);   //saída para latch
    pinMode(shift_data,  OUTPUT);   //saída para dados
    pinMode(shift_clk,   OUTPUT);   //saída para clock
@@ -70,8 +82,9 @@ void setup()
 
    //escreve nos endereços da EEPROM 
    digitalWrite(led_yellow, HIGH);
-   for(int address = 0; address < dataSize; address += 1) {
-    writeEEPROM(address, data[address]);
+   int mem_data = MEM_ORG + dataSize;
+   for(int address = MEM_ORG; address < mem_data; address += 1) {
+    writeEEPROM(address, data[address - MEM_ORG]);
    }
    digitalWrite(led_yellow, LOW);
 

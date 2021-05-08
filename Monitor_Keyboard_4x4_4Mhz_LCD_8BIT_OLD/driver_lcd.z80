@@ -159,21 +159,10 @@ lcd_clear:
 ;***************************************************************************
 lcd_init:
 	push af
+	ld a, 01h 				; limpa lcd
+    call lcd_send_command
     
-    ; reset lcd
-    ld a, 30h 				; limpa lcd
-    call lcd_send_command4
-    
-    ld a, 30h 				; limpa lcd
-    call lcd_send_command4
-    
-    ld a, 30h 				; limpa lcd
-    call lcd_send_command4
-    
-    ld a, 20h 				; Mode 4 bit
-    call lcd_send_command4
-    
-	ld a, 28h 				; func set
+    ld a, 38h 				; Modo 8 bits
     call lcd_send_command
     
     ld a, 0Eh 				; Display on, cursor blinking 
@@ -181,44 +170,8 @@ lcd_init:
     
     ld a, 06h 				; Increment cursor (shift cursor to right)
     call lcd_send_command
-    
-    ld a, 01h 				; limpa lcd
-    call lcd_send_command
-    
     pop af
     ret
-    
-    
-;***************************************************************************
-;	lcd_send_command4:
-;	Function: Send command to lcd
-;***************************************************************************
-lcd_send_command4:
-	push af
-
-    ; send x xxxxyyyy
-    srl a
-    srl a
-    srl a
-    srl a
-    
-    call lcd_delay
-    call lcd_delay
-    
-	out	(porta),a	;carrega acc no portb
-    call lcd_delay
-    
-    set 7, a		;envia bit de enable para o acc
-	out	(porta),a
-    call lcd_delay
-    
-    res 7, a
-	out	(porta),a
-    call lcd_delay
-    
-    pop af
-    ret    
-    
     
 
 ;***************************************************************************
@@ -226,40 +179,18 @@ lcd_send_command4:
 ;	Function: Send command to lcd
 ;***************************************************************************
 lcd_send_command:
-	call lcd_delay
 	push af
-    
-    ld (LCD_A),a ; preserva a
-    
-    ; send x xxxxyyyy
-    srl a
-    srl a
-    srl a
-    srl a
-    
-	out	(porta),a	;carrega acc no portb
+	out	(portb),a	;carrega acc no portb
     call lcd_delay
-    
-    set 7, a		;envia bit de enable para o acc
-	out	(porta),a
+	ld	a,00h		;envia byte 00h para o acc
+	out	(porta),a	;carrega acc no porta
     call lcd_delay
-    
-    res 7, a
-	out	(porta),a
+    ld a, en			;envia bit de enable para o acc
+	out	(porta),a	;carrega en no porta
     call lcd_delay
-    
-    ; send y xxxxyyyy
-    ld a,(LCD_A)
-    and $0f
-    
-    set 7, a		;envia bit de enable para o acc
-	out	(porta),a
+    ld a, 00h			;envia byte 00h para o acc
+	out	(porta),a	;carrega acc no porta
     call lcd_delay
-    
-    res 7, a
-	out	(porta),a
-    call lcd_delay
-    
     pop af
     ret
     
@@ -269,44 +200,17 @@ lcd_send_command:
 ;	Function: Send command to lcd
 ;***************************************************************************
 lcd_send_data:
-	call lcd_delay
 	push af
-    
-    ld (LCD_A),a ; preserva a
-    
-    ; send x xxxxyyyy
-    srl a
-    srl a
-    srl a
-    srl a
-    
-    set 6,a
-	out	(porta),a	;carrega acc no portb
+	out	(portb),a	;carrega acc no portb
     call lcd_delay
-    
-    set 6,a
-    set 7, a		;envia bit de enable para o acc
-	out	(porta),a
+    ld a, rs			;envia bit de rs para o acc
+	out	(porta),a	;carrega acc no porta
     call lcd_delay
-    
-    set 6,a
-    res 7, a
-	out	(porta),a
+    ld a, en|rs		;envia bit de en com rs para o acc
+	out	(porta),a	;carrega acc no porta
     call lcd_delay
-    
-    ; send y xxxxyyyy
-    ld a,(LCD_A)
-    and $0f
-    
-    set 6,a
-    set 7, a		;envia bit de enable para o acc
-	out	(porta),a
+    ld a, rs		;envia bit de rs para o acc
+	out	(porta),a	;carrega acc no porta
     call lcd_delay
-    
-    set 6,a
-    res 7, a
-	out	(porta),a
-    call lcd_delay
-    
     pop af
     ret

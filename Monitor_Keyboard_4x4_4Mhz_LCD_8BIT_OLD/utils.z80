@@ -24,7 +24,7 @@ delay_loop:
     
 lcd_delay:
 	push bc
-	ld c, 160
+	ld c, 120
 lcd_delay_loop:
 	dec c
     jp nz, lcd_delay_loop

@@ -1,0 +1,68 @@
+Sjasm Z80 Assembler v0.42c - www.xl2s.tk             [2021.04.27 - 17:00:28]
+
+in/code.asm
+Errors: 0
+
+       1   00:0000                      	output	out/code.bin
+       2   00:0000                      	defpage	0, 8000h, *
+       3   00:0000                      	
+       4   00:0000  (00)                	page 0
+       5   00:8000                      
+       6   00:8000                      	code @ 8000h
+       7   00:8000                      
+       8   00:8000  CD 0A 00            	call $000a 		; clear display
+       9   00:8003                          
+      10   00:8003  21 0A 80                ld hl,GAY
+      11   00:8006  CD 0E 00                call $000e
+      12   00:8009  76                      halt
+      13   00:800A                          
+      14   00:800A                          
+      15   00:800A                      GAY:
+      16   00:800A                      	db "GAY!!!", $ff
+      16   00:800A  47 41 59 21 21 21 FF 
+      17   00:8011                      
+      18   00:8011                      
+      19   00:8011                      
+      20   00:8011                      
+      21   00:8011                      inicio:
+      22   00:8011  3E 80               	ld a, $80
+      23   00:8013                      loop:
+      24   00:8013  D3 02               	out (2), a
+      25   00:8015  CB 0F                   rrc a
+      26   00:8017  CD 06 00                call $0006 ; delay
+      27   00:801A  DA 20 80            	jp c, back
+      28   00:801D  C3 13 80                jp loop
+      29   00:8020                      back:
+      30   00:8020  3E 01               	ld a, $01
+      31   00:8022                      loop2:
+      32   00:8022  D3 02               	out (2), a
+      33   00:8024  CB 07               	rlc a
+      34   00:8026  CD 06 00                call $0006 ; delay
+      35   00:8029  DA 11 80            	jp c, inicio
+      36   00:802C  C3 22 80                jp loop2
+
+    LABELS
+-------------------------------------------------
+00:0000800A   GAY
+00:00008011   inicio
+00:00008013   loop
+00:00008020   back
+00:00008022   loop2
+
+
+ Output: in/code.out
+-------------------------------------------------
+
+ Page: 00
+  Org: 00000000  Size: *  Used: 00000000
+
+    No output
+
+ Output: out\code.bin
+-------------------------------------------------
+
+ Page: 00
+  Org: 00008000  Size: *  Used: 0000002F
+
+   Address   Length Align   Label
+   00008000      47     @   GAY

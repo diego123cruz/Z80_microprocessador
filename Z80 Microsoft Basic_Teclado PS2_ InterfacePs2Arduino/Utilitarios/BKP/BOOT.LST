@@ -1,0 +1,704 @@
+0001   0000             ;==================================================================================
+0002   0000             ; Contents of this file are copyright Grant Searle
+0003   0000             ;
+0004   0000             ; You have permission to use this for NON COMMERCIAL USE ONLY
+0005   0000             ; If you wish to use it elsewhere, please include an acknowledgement to myself.
+0006   0000             ;
+0007   0000             ; http://searle.hostei.com/grant/index.html
+0008   0000             ;
+0009   0000             ; eMail: home.micros01@btinternet.com
+0010   0000             ;
+0011   0000             ; If the above don't work, please perform an Internet search to see if I have
+0012   0000             ; updated the web page hosting service.
+0013   0000             ;
+0014   0000             ;==================================================================================
+0015   0000             
+0016   0000             ; Minimum 6850 ACIA interrupt driven serial I/O to run modified NASCOM Basic 4.7
+0017   0000             ; Full input buffering with incoming data hardware handshaking
+0018   0000             ; Handshake shows full before the buffer is totally filled to allow run-on from the sender
+0019   0000             
+0020   0000             ;
+0021   0000             ;   DIEGO CRUZ - 08/2021
+0022   0000             ;   ----------------------------------
+0023   0000             ;               ROM MAP
+0024   0000             ;   
+0025   0000             ;   Monitor     0000H - ????
+0026   0000             ;
+0027   0000             ;   Basic       6000H - 7D00H
+0028   0000             ;   LIVRE       7D00H - 7FF0
+0029   0000             ;
+0030   0000             ;   ===================================
+0031   0000             ;
+0032   0000             ;               RAM MAP
+0033   0000             ;
+0034   0000             ;   Monitor vars        8000H - 80FFH
+0035   0000             ;   Basic work stace    8200H - TOP
+0036   0000             ;
+0037   0000             ;
+0038   0000             
+0039   0000             ;   -------   HARDWARE   -------
+0040   0000             porta       =   $01
+0041   0000             portb       =   $02
+0042   0000             
+0043   0000             
+0044   0000             
+0045   0000             SER_BUFSIZE     .EQU     3FH
+0046   0000             SER_FULLSIZE    .EQU     30H
+0047   0000             SER_EMPTYSIZE   .EQU     5
+0048   0000             
+0049   0000             serBuf          .EQU     $8000
+0050   0000             serInPtr        .EQU     serBuf+SER_BUFSIZE
+0051   0000             serRdPtr        .EQU     serInPtr+2
+0052   0000             serBufUsed      .EQU     serRdPtr+2
+0053   0000             basicStarted    .EQU     serBufUsed+1
+0054   0000             TEMPSTACK       .EQU     $80ED ; Top of BASIC line input buffer so is "free ram" when BASIC resets
+0055   0000             
+0056   0000             LCD_A		=    $80EE
+0057   0000             
+0058   0000             LCD_BUFFER_POINT    =   $80F1
+0059   0000             
+0060   0000             LCD_BUFFER          =   $8100
+0061   0000             LCD_BUFFER_END      =   $8150
+0062   0000             
+0063   0000             LCD_BUFFER_SIZE     =   $50 ;   0 - 80
+0064   0000             
+0065   0000             
+0066   0000             CR              .EQU     0DH            ; enter
+0067   0000             LF              .EQU     0AH            ; retorna o cursor
+0068   0000             CS              .EQU     0CH             ; Clear screen
+0069   0000             
+0070   0000                             .ORG $0000
+0071   0000             ;------------------------------------------------------------------------------
+0072   0000             ; Reset
+0073   0000                        
+0074   0000 F3          				DI                       ;Disable interrupts
+0075   0001 C3 C7 00                    JP       INIT            ;Initialize Hardware and go
+0076   0004             
+0077   0004             ;------------------------------------------------------------------------------
+0078   0004             ; TX a character over RS232 
+0079   0004             
+0080   0008                             .ORG     0008H
+0081   0008 C3 97 00    	            JP      TXA
+0082   000B             
+0083   000B             ;------------------------------------------------------------------------------
+0084   000B             ; RX a character over RS232 Channel A [Console], hold here until char ready.
+0085   000B             
+0086   0010                             .ORG 0010H
+0087   0010 C3 6D 00                    JP      RXA
+0088   0013             
+0089   0013             ;------------------------------------------------------------------------------
+0090   0013             ; Check serial status
+0091   0013             
+0092   0018                             .ORG 0018H
+0093   0018 C3 B9 00                    JP      CKINCHAR
+0094   001B             
+0095   001B             ;------------------------------------------------------------------------------
+0096   001B             ; RST 38 - INTERRUPT VECTOR [ for IM 1 ]
+0097   001B             
+0098   0038                             .ORG     0038H
+0099   0038 18 00                       JR      serialInt       
+0100   003A             
+0101   003A             ;------------------------------------------------------------------------------
+0102   003A             serialInt:      
+0103   003A F5          		        PUSH     AF
+0104   003B E5                          PUSH     HL
+0105   003C             
+0106   003C DB 01                       IN       A,(porta)
+0107   003E             
+0108   003E CD 17 02                    call delay
+0109   0041             
+0110   0041 F5                          PUSH     AF
+0111   0042 3A 43 80                    LD       A,(serBufUsed)
+0112   0045 FE 3F                       CP       SER_BUFSIZE     ; If full then ignore
+0113   0047 20 03                       JR       NZ,notFull
+0114   0049 F1                          POP      AF
+0115   004A 18 1C                       JR       rts0
+0116   004C             
+0117   004C             notFull:        
+0118   004C 2A 3F 80    				LD       HL,(serInPtr)
+0119   004F 23                          INC      HL
+0120   0050 7D                          LD       A,L             ; Only need to check low byte becasuse buffer<256 bytes
+0121   0051 FE 3F                       CP       (serBuf+SER_BUFSIZE) & $FF
+0122   0053 20 03                       JR       NZ, notWrap
+0123   0055 21 00 80                    LD       HL,serBuf
+0124   0058             notWrap:        
+0125   0058 22 3F 80    				LD       (serInPtr),HL
+0126   005B F1                          POP      AF
+0127   005C 77                          LD       (HL),A
+0128   005D 3A 43 80                    LD       A,(serBufUsed)
+0129   0060 3C                          INC      A
+0130   0061 32 43 80                    LD       (serBufUsed),A
+0131   0064 FE 30                       CP       SER_FULLSIZE
+0132   0066 38 00                       JR       C,rts0
+0133   0068                             ;LD       A,RTS_HIGH
+0134   0068                             ;OUT      ($80),A
+0135   0068             rts0:           
+0136   0068 E1          				POP      HL
+0137   0069 F1                          POP      AF
+0138   006A FB                          EI
+0139   006B ED 4D                       RETI
+0140   006D             
+0141   006D             ;------------------------------------------------------------------------------
+0142   006D             RXA:
+0143   006D             waitForChar:    
+0144   006D 3A 43 80    				LD       A,(serBufUsed)
+0145   0070 FE 00                       CP       $00
+0146   0072 28 F9                       JR       Z, waitForChar
+0147   0074 E5                          PUSH     HL
+0148   0075 2A 41 80                    LD       HL,(serRdPtr)
+0149   0078 23                          INC      HL
+0150   0079 7D                          LD       A,L             ; Only need to check low byte becasuse buffer<256 bytes
+0151   007A FE 3F                       CP       (serBuf+SER_BUFSIZE) & $FF
+0152   007C 20 03                       JR       NZ, notRdWrap
+0153   007E 21 00 80                    LD       HL,serBuf
+0154   0081             notRdWrap:      
+0155   0081 F3          				DI         ; disable int
+0156   0082 CD 17 02                    call delay
+0157   0085             
+0158   0085 22 41 80                    LD       (serRdPtr),HL
+0159   0088 3A 43 80                    LD       A,(serBufUsed)
+0160   008B 3D                          DEC      A
+0161   008C 32 43 80                    LD       (serBufUsed),A
+0162   008F FE 05                       CP       SER_EMPTYSIZE
+0163   0091 30 00                       JR       NC,rts1
+0164   0093                             ;LD       A,RTS_LOW
+0165   0093                             ;OUT      ($80),A
+0166   0093             rts1:
+0167   0093 7E                          LD       A,(HL)
+0168   0094 FB                          EI
+0169   0095 E1                          POP      HL
+0170   0096 C9                          RET                      ; Char ready in A
+0171   0097             
+0172   0097             ;------------------------------------------------------------------------------
+0173   0097             TXA:            
+0174   0097             				; CHAR IN A 
+0175   0097             ver_enter:       
+0176   0097             
+0177   0097                             ; trata dados para o lcd
+0178   0097 FE 0D                       CP      $0D                     ; compara com ENTER
+0179   0099 20 07                       jr      nz, ver_limpa
+0180   009B             
+0181   009B CD 63 01                    call    shift_lcd_up
+0182   009E CD CF 01                    call    show_lcd_screen
+0183   00A1 C9                          RET
+0184   00A2             
+0185   00A2             ver_limpa:
+0186   00A2 FE 0C                       CP      $0C                     ; compara com limpar tela
+0187   00A4 20 07                       jr      NZ, ver_line
+0188   00A6                             
+0189   00A6 CD 51 01                    call    clear_lcd_screen
+0190   00A9 CD CF 01                    call    show_lcd_screen
+0191   00AC C9                          RET
+0192   00AD             
+0193   00AD             ver_line:
+0194   00AD FE 0A                       CP      $0A                     ; retorna começo da linha
+0195   00AF 20 01                       jr      NZ, print_lcd      
+0196   00B1             
+0197   00B1                                 ;----- verificar se precisa add algo aqui
+0198   00B1                             ;call    shift_lcd_up
+0199   00B1                             ;call    show_lcd_screen
+0200   00B1 C9                          RET   
+0201   00B2             
+0202   00B2             print_lcd:
+0203   00B2 CD B5 01                    call    print_to_lcd_screen
+0204   00B5 CD CF 01                    call    show_lcd_screen
+0205   00B8             
+0206   00B8 C9                          RET
+0207   00B9             
+0208   00B9             
+0209   00B9             
+0210   00B9             ;------------------------------------------------------------------------------
+0211   00B9             CKINCHAR:
+0212   00B9 3A 43 80    				LD       A,(serBufUsed)
+0213   00BC FE 00                       CP       $0
+0214   00BE C9                          RET
+0215   00BF             
+0216   00BF             PRINT:          
+0217   00BF 7E          				LD       A,(HL)          ; Get character
+0218   00C0 B7                          OR       A               ; Is it $00 ?
+0219   00C1 C8                          RET      Z               ; Then RETurn on terminator
+0220   00C2 CF                          RST      08H             ; Print it
+0221   00C3 23                          INC      HL              ; Next Character
+0222   00C4 18 F9                       JR       PRINT           ; Continue until $00
+0223   00C6 C9                          RET
+0224   00C7             ;------------------------------------------------------------------------------
+0225   00C7             INIT:
+0226   00C7                             
+0227   00C7 21 ED 80                   LD        HL,TEMPSTACK    ; Temp stack
+0228   00CA F9                         LD        SP,HL           ; Set up a temporary stack
+0229   00CB 21 00 80                   LD        HL,serBuf
+0230   00CE 22 3F 80                   LD        (serInPtr),HL
+0231   00D1 22 41 80                   LD        (serRdPtr),HL
+0232   00D4 AF                         XOR       A               ;0 to accumulator
+0233   00D5 32 43 80                   LD        (serBufUsed),A
+0234   00D8 CD 37 02                   call      lcd_init            ; init hardware
+0235   00DB CD 43 01                   call      init_lcd_screen    ; init logical
+0236   00DE CD 17 02                   call      delay
+0237   00E1 ED 56                      IM        1
+0238   00E3 FB                         EI
+0239   00E4 21 1D 01                   LD        HL,SIGNON1      ; Sign-on message
+0240   00E7 CD BF 00                   CALL      PRINT           ; Output string
+0241   00EA 3A 44 80                   LD        A,(basicStarted); Check the BASIC STARTED flag
+0242   00ED FE 59                      CP        'Y'             ; to see if this is power-up
+0243   00EF 20 16                      JR        NZ,COLDSTART    ; If not BASIC started then always do cold start
+0244   00F1 21 30 01                   LD        HL,SIGNON2      ; Cold/warm message
+0245   00F4 CD BF 00                   CALL      PRINT           ; Output string
+0246   00F7             CORW:
+0247   00F7 CD 6D 00                   CALL      RXA
+0248   00FA E6 DF                      AND       %11011111       ; lower to uppercase
+0249   00FC FE 43                      CP        'C'
+0250   00FE 20 0F                      JR        NZ, CHECKWARM
+0251   0100 CF                         RST       08H
+0252   0101 3E 0D                      LD        A,$0D
+0253   0103 CF                         RST       08H
+0254   0104 3E 0A                      LD        A,$0A
+0255   0106 CF                         RST       08H
+0256   0107             COLDSTART:     
+0257   0107 3E 59       				LD        A,'Y'           ; Set the BASIC STARTED flag
+0258   0109 32 44 80                   LD        (basicStarted),A
+0259   010C C3 00 60                   JP        $6000           ; Start BASIC COLD
+0260   010F             CHECKWARM:
+0261   010F FE 57                      CP        'W'
+0262   0111 20 E4                      JR        NZ, CORW
+0263   0113 CF                         RST       08H
+0264   0114 3E 0D                      LD        A,$0D
+0265   0116 CF                         RST       08H
+0266   0117 3E 0A                      LD        A,$0A
+0267   0119 CF                         RST       08H
+0268   011A C3 03 60                   JP        $6003           ; Start BASIC WARM
+0269   011D                           
+0270   011D             SIGNON1:       
+0271   011D             			    ;.BYTE     CS
+0272   011D                            ;.BYTE     "Z80 SBC By Grant Searle",CR,LF,0
+0273   011D 5A3830202D20               .BYTE     "Z80 - Diego Cruz",CR,LF,0
+0273   0123 446965676F204372757A0D0A00
+0274   0130             SIGNON2:       
+0275   0130             				;.BYTE     CR,LF
+0276   0130 2843296F6C64               .BYTE     "(C)old or (W)arm? ",0
+0276   0136 206F722028572961726D3F2000
+0277   0143             
+0278   0143             
+0279   0143             
+0280   0143             
+0281   0143             ; =======================================================================
+0282   0143             ; Inicia LCD screen
+0283   0143             ; =======================================================================
+0284   0143             init_lcd_screen:
+0285   0143 F5                  PUSH    AF
+0286   0144 3E 00               LD      A, $0
+0287   0146 32 F1 80            LD      (LCD_BUFFER_POINT), A       ; reset pointer buffer to zero
+0288   0149 CD 51 01            call    clear_lcd_screen
+0289   014C CD CF 01            call    show_lcd_screen
+0290   014F F1                  POP     AF
+0291   0150 C9                  RET
+0292   0151             
+0293   0151             
+0294   0151             ; =======================================================================
+0295   0151             ; Limpa buffer
+0296   0151             ; =======================================================================
+0297   0151             clear_lcd_screen:
+0298   0151 F5                  PUSH    AF
+0299   0152 E5                  PUSH    HL
+0300   0153 21 00 81            LD      HL, LCD_BUFFER
+0301   0156 3E 50               LD      A,  LCD_BUFFER_SIZE
+0302   0158             clear_lcd_loop:
+0303   0158 36 1B               LD      (HL), $1B           ; char espace
+0304   015A 23                  INC     HL
+0305   015B 3D                  DEC     A
+0306   015C FE 00               CP      $00
+0307   015E 20 F8               JR      NZ, clear_lcd_loop
+0308   0160             
+0309   0160 E1                  POP     HL
+0310   0161 F1                  POP     AF
+0311   0162             
+0312   0162 C9                  RET
+0313   0163             
+0314   0163             ; =======================================================================
+0315   0163             ; Shift buffer  "enter"
+0316   0163             ; =======================================================================
+0317   0163             shift_lcd_up:
+0318   0163 F5                  PUSH    AF
+0319   0164 E5                  PUSH    HL
+0320   0165 D5                  PUSH    DE
+0321   0166             
+0322   0166             
+0323   0166 3E 00               LD      A, $00
+0324   0168 32 F1 80            LD      (LCD_BUFFER_POINT), A   ; zera buffer size max 20 - LCD 20x4
+0325   016B                     
+0326   016B 21 28 81            LD      HL, LCD_BUFFER_END-$28 ; buffer end menos 40 - source
+0327   016E 11 3C 81            LD      DE, LCD_BUFFER_END-$14 ; buffer end menos 20 - destination
+0328   0171             
+0329   0171 3E 14               LD      A, $14                 ; A contem size of line
+0330   0173             copy_line2_to1:
+0331   0173 F5                  PUSH    AF
+0332   0174 7E                  LD      A, (HL)
+0333   0175 12                  LD      (DE), A
+0334   0176 F1                  POP     AF
+0335   0177 23                  inc     HL
+0336   0178 13                  inc     DE
+0337   0179 3D                  dec     A
+0338   017A FE 00               CP      $00
+0339   017C 20 F5               JR      NZ, copy_line2_to1
+0340   017E             
+0341   017E             
+0342   017E             
+0343   017E             
+0344   017E 21 14 81            LD      HL, LCD_BUFFER_END-$3C ; buffer end menos 60 - source
+0345   0181 11 28 81            LD      DE, LCD_BUFFER_END-$28 ; buffer end menos 40 - destination
+0346   0184             
+0347   0184 3E 14               LD      A, $14                 ; A contem size of line
+0348   0186             copy_line3_to2:
+0349   0186 F5                  PUSH    AF
+0350   0187 7E                  LD      A, (HL)
+0351   0188 12                  LD      (DE), A
+0352   0189 F1                  POP     AF
+0353   018A 23                  inc     HL
+0354   018B 13                  inc     DE
+0355   018C 3D                  dec     A
+0356   018D FE 00               CP      $00
+0357   018F 20 F5               JR      NZ, copy_line3_to2
+0358   0191             
+0359   0191             
+0360   0191             
+0361   0191             
+0362   0191 21 00 81            LD      HL, LCD_BUFFER_END-$50 ; buffer end menos 80 - source
+0363   0194 11 14 81            LD      DE, LCD_BUFFER_END-$3C ; buffer end menos 60 - destination
+0364   0197             
+0365   0197 3E 14               LD      A, $14                 ; A contem size of line
+0366   0199             copy_line4_to3:
+0367   0199 F5                  PUSH    AF
+0368   019A 7E                  LD      A, (HL)
+0369   019B 12                  LD      (DE), A
+0370   019C F1                  POP     AF
+0371   019D 23                  inc     HL
+0372   019E 13                  inc     DE
+0373   019F 3D                  dec     A
+0374   01A0 FE 00               CP      $00
+0375   01A2 20 F5               JR      NZ, copy_line4_to3
+0376   01A4             
+0377   01A4             
+0378   01A4             ;------- limpa line 4
+0379   01A4 21 00 81            LD      HL, LCD_BUFFER
+0380   01A7 3E 14               LD      A,  $14 ; 20
+0381   01A9             limpa_line4:
+0382   01A9 36 1B               LD      (HL), $1B           ; char espace
+0383   01AB 23                  INC     HL
+0384   01AC 3D                  DEC     A
+0385   01AD FE 00               CP      $00
+0386   01AF 20 F8               JR      NZ, limpa_line4
+0387   01B1             
+0388   01B1             
+0389   01B1 D1                  POP     DE
+0390   01B2 E1                  POP     HL
+0391   01B3 F1                  POP     AF
+0392   01B4             
+0393   01B4 C9                  RET
+0394   01B5             
+0395   01B5             ; =======================================================================
+0396   01B5             ; FUNCAO PARA PRINTAR A CHAR IN A
+0397   01B5             ; =======================================================================
+0398   01B5             print_to_lcd_screen:
+0399   01B5                 ; char in register A
+0400   01B5 E5              PUSH    HL
+0401   01B6 F5              PUSH    AF  ; guarda char
+0402   01B7                 
+0403   01B7 3A F1 80        LD      A,  (LCD_BUFFER_POINT)
+0404   01BA FE 14           CP      $14 ; 20
+0405   01BC CC 63 01        call    Z,  shift_lcd_up
+0406   01BF             
+0407   01BF 21 00 81        LD      HL, LCD_BUFFER
+0408   01C2             
+0409   01C2 3A F1 80        LD      A, (LCD_BUFFER_POINT)
+0410   01C5 6F              LD      L, A
+0411   01C6             
+0412   01C6 F1              POP     AF  ; recupera char in A
+0413   01C7 77              LD      (HL),  A
+0414   01C8 23              INC     HL
+0415   01C9 7D              LD      A, L
+0416   01CA 32 F1 80        LD      (LCD_BUFFER_POINT), A
+0417   01CD             
+0418   01CD E1              POP     HL
+0419   01CE             
+0420   01CE C9              RET
+0421   01CF             
+0422   01CF             ; =======================================================================
+0423   01CF             ; Show buffer to LCD Display
+0424   01CF             ; =======================================================================
+0425   01CF             show_lcd_screen:
+0426   01CF F5                  PUSH    AF
+0427   01D0 E5                  PUSH    HL
+0428   01D1 21 00 81            LD      HL, LCD_BUFFER
+0429   01D4             
+0430   01D4 3E D4               LD      A, lcd_line4
+0431   01D6 CD 86 02            call lcd_send_command
+0432   01D9             
+0433   01D9             print_line4:
+0434   01D9 7E                  LD      A, (HL)
+0435   01DA CD BD 02            call    lcd_send_data
+0436   01DD 7D                  LD      A, L
+0437   01DE 3C                  inc     A
+0438   01DF 23                  inc     HL
+0439   01E0 FE 14               CP      $14 ; 20
+0440   01E2 20 F5               JR      NZ, print_line4
+0441   01E4             
+0442   01E4                     ;  vai para linha 3
+0443   01E4 3E 94               LD      A, lcd_line3
+0444   01E6 CD 86 02            call    lcd_send_command
+0445   01E9             print_line3:
+0446   01E9 7E                  LD      A, (HL)
+0447   01EA CD BD 02            call    lcd_send_data
+0448   01ED 7D                  LD      A, L
+0449   01EE 3C                  inc     A
+0450   01EF 23                  inc     HL
+0451   01F0 FE 28               CP      $28 ; 40
+0452   01F2 20 F5               JR      NZ, print_line3
+0453   01F4             
+0454   01F4                     ;   vai para a linha 2
+0455   01F4 3E C0               LD      A, lcd_line2
+0456   01F6 CD 86 02            call    lcd_send_command
+0457   01F9             print_line2:
+0458   01F9 7E                  LD      A, (HL)
+0459   01FA CD BD 02            call    lcd_send_data
+0460   01FD 7D                  LD      A, L
+0461   01FE 3C                  inc     A
+0462   01FF 23                  inc     HL
+0463   0200 FE 3C               CP      $3C ; 60
+0464   0202 20 F5               JR      NZ, print_line2
+0465   0204             
+0466   0204                     ;   vai para a linha 1
+0467   0204 3E 80               LD      A, lcd_line1
+0468   0206 CD 86 02            call    lcd_send_command
+0469   0209             print_line1:
+0470   0209 7E                  LD      A, (HL)
+0471   020A CD BD 02            call    lcd_send_data
+0472   020D 7D                  LD      A, L
+0473   020E 3C                  inc     A
+0474   020F 23                  inc     HL
+0475   0210 FE 50               CP      $50 ; 80
+0476   0212 20 F5               JR      NZ, print_line1
+0477   0214             
+0478   0214 E1                  POP     HL
+0479   0215 F1                  POP     AF
+0480   0216 C9                  RET
+0481   0217             
+0482   0217             
+0483   0217             
+0484   0217             
+0485   0217             
+0486   0217             
+0487   0217                            
+0488   0217             ;; ---------------------- LCD ----------------------
+0489   0217             en	= 01h
+0490   0217             rw	= 02h
+0491   0217             rs	= 04h
+0492   0217             
+0493   0217             ; commands
+0494   0217             lcd_line1	=	$80
+0495   0217             lcd_line2	=	$C0
+0496   0217             lcd_line3	=	$94
+0497   0217             lcd_line4	=	$D4
+0498   0217             
+0499   0217             ;***************************************************************************
+0500   0217             ;	delay:
+0501   0217             ;	Function: Delay
+0502   0217             ;***************************************************************************
+0503   0217             
+0504   0217             delay:
+0505   0217 C5          	push bc
+0506   0218 06 28           ld b, 40
+0507   021A             delay_loop_b:
+0508   021A 0E FF       	ld c, 255
+0509   021C             delay_loop:
+0510   021C 0D          	dec c
+0511   021D C2 1C 02        jp nz, delay_loop
+0512   0220 05              dec b
+0513   0221 C2 1A 02        jp nz, delay_loop_b
+0514   0224 C1              pop bc
+0515   0225 C9              ret
+0516   0226             
+0517   0226             ;***************************************************************************
+0518   0226             ;	lcd_delay:
+0519   0226             ;
+0520   0226             ;***************************************************************************
+0521   0226             lcd_delay:
+0522   0226 C5          	push bc
+0523   0227 0E A0       	ld c, 160
+0524   0229             lcd_delay_loop:
+0525   0229 0D          	dec c
+0526   022A C2 29 02        jp nz, lcd_delay_loop
+0527   022D C1              pop bc
+0528   022E C9              ret
+0529   022F             
+0530   022F             ;***************************************************************************
+0531   022F             ;	lcd_init:
+0532   022F             ;	Function: Init display lcd 16x2
+0533   022F             ;***************************************************************************
+0534   022F             lcd_clear:
+0535   022F F5              push af
+0536   0230 3E 01           ld a, 01h 				; limpa lcd
+0537   0232 CD 86 02        call lcd_send_command
+0538   0235 F1              pop af
+0539   0236 C9              ret
+0540   0237                 
+0541   0237                 
+0542   0237             ;***************************************************************************
+0543   0237             ;	lcd_init:
+0544   0237             ;	Function: Init display lcd 16x2
+0545   0237             ;***************************************************************************
+0546   0237             lcd_init:
+0547   0237 F5          	push af
+0548   0238                 
+0549   0238                 ; reset lcd
+0550   0238 3E 30           ld a, 30h 				; limpa lcd
+0551   023A CD 62 02        call lcd_send_command4
+0552   023D                 
+0553   023D 3E 30           ld a, 30h 				; limpa lcd
+0554   023F CD 62 02        call lcd_send_command4
+0555   0242                 
+0556   0242 3E 30           ld a, 30h 				; limpa lcd
+0557   0244 CD 62 02        call lcd_send_command4
+0558   0247                 
+0559   0247 3E 20           ld a, 20h 				; Mode 4 bit
+0560   0249 CD 62 02        call lcd_send_command4
+0561   024C                 
+0562   024C 3E 28       	ld a, 28h 				; func set
+0563   024E CD 86 02        call lcd_send_command
+0564   0251                 
+0565   0251                 ;ld a, 0Eh 				; Display on, cursor blinking 
+0566   0251 3E 0C           ld  a, 0Ch              ; Display on, cursor off
+0567   0253 CD 86 02        call lcd_send_command
+0568   0256                 
+0569   0256 3E 06           ld a, 06h 				; Increment cursor (shift cursor to right)
+0570   0258 CD 86 02        call lcd_send_command
+0571   025B                 
+0572   025B 3E 01           ld a, 01h 				; limpa lcd
+0573   025D CD 86 02        call lcd_send_command
+0574   0260                 
+0575   0260 F1              pop af
+0576   0261 C9              ret
+0577   0262                 
+0578   0262                 
+0579   0262             ;***************************************************************************
+0580   0262             ;	lcd_send_command4:
+0581   0262             ;	Function: Send command to lcd
+0582   0262             ;***************************************************************************
+0583   0262             lcd_send_command4:
+0584   0262 F5          	push af
+0585   0263             
+0586   0263                 ; send x xxxxyyyy
+0587   0263 CB 3F           srl a
+0588   0265 CB 3F           srl a
+0589   0267 CB 3F           srl a
+0590   0269 CB 3F           srl a
+0591   026B                 
+0592   026B CD 26 02        call lcd_delay
+0593   026E CD 26 02        call lcd_delay
+0594   0271                 
+0595   0271 D3 01       	out	(porta),a	;carrega acc no portb
+0596   0273 CD 26 02        call lcd_delay
+0597   0276                 
+0598   0276 CB FF           set 7, a		;envia bit de enable para o acc
+0599   0278 D3 01       	out	(porta),a
+0600   027A CD 26 02        call lcd_delay
+0601   027D                 
+0602   027D CB BF           res 7, a
+0603   027F D3 01       	out	(porta),a
+0604   0281 CD 26 02        call lcd_delay
+0605   0284                 
+0606   0284 F1              pop af
+0607   0285 C9              ret    
+0608   0286                 
+0609   0286                 
+0610   0286             
+0611   0286             ;***************************************************************************
+0612   0286             ;	lcd_send_command:
+0613   0286             ;	Function: Send command to lcd
+0614   0286             ;***************************************************************************
+0615   0286             lcd_send_command:
+0616   0286 CD 26 02    	call lcd_delay
+0617   0289 F5          	push af
+0618   028A                 
+0619   028A 32 EE 80        ld (LCD_A),a ; preserva a
+0620   028D                 
+0621   028D                 ; send x xxxxyyyy
+0622   028D CB 3F           srl a
+0623   028F CB 3F           srl a
+0624   0291 CB 3F           srl a
+0625   0293 CB 3F           srl a
+0626   0295                 
+0627   0295 D3 01       	out	(porta),a	;carrega acc no portb
+0628   0297 CD 26 02        call lcd_delay
+0629   029A                 
+0630   029A CB FF           set 7, a		;envia bit de enable para o acc
+0631   029C D3 01       	out	(porta),a
+0632   029E CD 26 02        call lcd_delay
+0633   02A1                 
+0634   02A1 CB BF           res 7, a
+0635   02A3 D3 01       	out	(porta),a
+0636   02A5 CD 26 02        call lcd_delay
+0637   02A8                 
+0638   02A8                 ; send y xxxxyyyy
+0639   02A8 3A EE 80        ld a,(LCD_A)
+0640   02AB E6 0F           and $0f
+0641   02AD                 
+0642   02AD CB FF           set 7, a		;envia bit de enable para o acc
+0643   02AF D3 01       	out	(porta),a
+0644   02B1 CD 26 02        call lcd_delay
+0645   02B4                 
+0646   02B4 CB BF           res 7, a
+0647   02B6 D3 01       	out	(porta),a
+0648   02B8 CD 26 02        call lcd_delay
+0649   02BB                 
+0650   02BB F1              pop af
+0651   02BC C9              ret
+0652   02BD                 
+0653   02BD             
+0654   02BD             ;***************************************************************************
+0655   02BD             ;	lcd_send_command:
+0656   02BD             ;	Function: Send command to lcd
+0657   02BD             ;***************************************************************************
+0658   02BD             lcd_send_data:
+0659   02BD CD 26 02    	call lcd_delay
+0660   02C0 F5          	push af
+0661   02C1                 
+0662   02C1 32 EE 80        ld (LCD_A),a ; preserva a
+0663   02C4                 
+0664   02C4                 ; send x xxxxyyyy
+0665   02C4 CB 3F           srl a
+0666   02C6 CB 3F           srl a
+0667   02C8 CB 3F           srl a
+0668   02CA CB 3F           srl a
+0669   02CC                 
+0670   02CC CB F7           set 6,a
+0671   02CE D3 01       	out	(porta),a	;carrega acc no portb
+0672   02D0 CD 26 02        call lcd_delay
+0673   02D3                 
+0674   02D3 CB F7           set 6,a
+0675   02D5 CB FF           set 7, a		;envia bit de enable para o acc
+0676   02D7 D3 01       	out	(porta),a
+0677   02D9 CD 26 02        call lcd_delay
+0678   02DC                 
+0679   02DC CB F7           set 6,a
+0680   02DE CB BF           res 7, a
+0681   02E0 D3 01       	out	(porta),a
+0682   02E2 CD 26 02        call lcd_delay
+0683   02E5                 
+0684   02E5                 ; send y xxxxyyyy
+0685   02E5 3A EE 80        ld a,(LCD_A)
+0686   02E8 E6 0F           and $0f
+0687   02EA                 
+0688   02EA CB F7           set 6,a
+0689   02EC CB FF           set 7, a		;envia bit de enable para o acc
+0690   02EE D3 01       	out	(porta),a
+0691   02F0 CD 26 02        call lcd_delay
+0692   02F3                 
+0693   02F3 CB F7           set 6,a
+0694   02F5 CB BF           res 7, a
+0695   02F7 D3 01       	out	(porta),a
+0696   02F9 CD 26 02        call lcd_delay
+0697   02FC                 
+0698   02FC F1              pop af
+0699   02FD C9              ret
+0700   02FE                           
+0701   02FE             .END
+tasm: Number of errors = 0

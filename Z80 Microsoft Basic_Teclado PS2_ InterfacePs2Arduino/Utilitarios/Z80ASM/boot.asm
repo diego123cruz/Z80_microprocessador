@@ -105,7 +105,7 @@ serialInt:
 
                 IN       A,(porta)
 
-                call delay
+                call delay  ; esse precisa para nao pegar varias vezes o mesmo char, ajustar
 
                 PUSH     AF
                 LD       A,(serBufUsed)
@@ -153,7 +153,7 @@ waitForChar:
                 LD       HL,serBuf
 notRdWrap:      
 				DI         ; disable int
-                call delay
+                ; CRUZ call delay
 
                 LD       (serRdPtr),HL
                 LD       A,(serBufUsed)
@@ -233,7 +233,7 @@ INIT:
                LD        (serBufUsed),A
                call      lcd_init            ; init hardware
                call      init_lcd_screen    ; init logical
-               call      delay
+               ; CRUZ call      delay
                IM        1
                EI
                LD        HL,SIGNON1      ; Sign-on message
@@ -519,13 +519,13 @@ delay_loop:
 ;
 ;***************************************************************************
 lcd_delay:
-	push bc
-	ld c, 160
+	push bc                          ; 2.75 us
+	ld c, 55                         ; 1.75 us
 lcd_delay_loop:
-	dec c
-    jp nz, lcd_delay_loop
-    pop bc
-    ret
+	dec c                            ; 1 us
+    jp nz, lcd_delay_loop            ; true = 3 us, false 1.75 us
+    pop bc                           ; 2.50 us
+    ret                              ; 2.50 us
 
 ;***************************************************************************
 ;	lcd_init:
@@ -589,9 +589,6 @@ lcd_send_command4:
     srl a
     srl a
     
-    call lcd_delay
-    call lcd_delay
-    
 	out	(porta),a	;carrega acc no portb
     call lcd_delay
     
@@ -613,7 +610,6 @@ lcd_send_command4:
 ;	Function: Send command to lcd
 ;***************************************************************************
 lcd_send_command:
-	call lcd_delay
 	push af
     
     ld (LCD_A),a ; preserva a
@@ -656,7 +652,6 @@ lcd_send_command:
 ;	Function: Send command to lcd
 ;***************************************************************************
 lcd_send_data:
-	call lcd_delay
 	push af
     
     ld (LCD_A),a ; preserva a

@@ -40,8 +40,6 @@
 porta       =   $01
 portb       =   $02
 
-
-
 SER_BUFSIZE     .EQU     3FH
 SER_FULLSIZE    .EQU     30H
 SER_EMPTYSIZE   .EQU     5
@@ -171,7 +169,7 @@ rts1:
 
 ;------------------------------------------------------------------------------
 TXA:            
-				; CHAR IN A 
+				; CHAR IN A
 ver_enter:       
 
                 ; trata dados para o lcd
@@ -221,6 +219,9 @@ PRINT:
                 INC      HL              ; Next Character
                 JR       PRINT           ; Continue until $00
                 RET
+
+;------------------------------------------------------------------------------
+;   INIT AFTER RESET
 ;------------------------------------------------------------------------------
 INIT:
                 
@@ -233,7 +234,7 @@ INIT:
                LD        (serBufUsed),A
                call      lcd_init            ; init hardware
                call      init_lcd_screen    ; init logical
-               ; CRUZ call      delay
+
                IM        1
                EI
                LD        HL,SIGNON1      ; Sign-on message

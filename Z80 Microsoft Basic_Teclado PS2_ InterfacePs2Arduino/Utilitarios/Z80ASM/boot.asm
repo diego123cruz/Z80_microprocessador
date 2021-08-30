@@ -586,9 +586,15 @@ continue_print:
     LD      A, L
     LD      (LCD_BUFFER_POINT), A
 
-    LD      A, '_'       ; coloca _ para mostrar onde esta o cursor
-    LD      (HL), A      ; coloca _ para mostrar onde esta o cursor
+    ; coloca cursor
+    LD      A,  (LCD_BUFFER_POINT)
+    CP      $14 ; 20
+    JP    Z,  continue_print_fim
 
+    LD      A, '_'       ; coloca '_' para mostrar onde esta o cursor
+    LD      (HL), A      ; coloca '_' para mostrar onde esta o cursor
+
+continue_print_fim:
     POP     HL
 
     RET

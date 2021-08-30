@@ -126,7 +126,7 @@ MO      .EQU    24H             ; Missing operand
 HX      .EQU    26H             ; HEX error
 BN      .EQU    28H             ; BIN error
 
-        .ORG    00390H
+        .ORG    03A0H
 
 COLD:   JP      STARTB          ; Jump for cold start
 WARM:   JP      WARMST          ; Jump for warm start
@@ -225,7 +225,7 @@ SIGNON: .BYTE   "Z80 BASIC Ver 4.7b",CR,LF
         .BYTE   "Copyright ",40,"C",41
         .BYTE   " 1978 by Microsoft",CR,LF,0,0
 
-MEMMSG: .BYTE   "Memory top",0
+MEMMSG: .BYTE   "Mem top",0
 
 ; FUNCTION ADDRESS TABLE
 

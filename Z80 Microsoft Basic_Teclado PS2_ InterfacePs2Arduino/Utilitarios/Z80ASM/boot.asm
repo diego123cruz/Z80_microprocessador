@@ -56,10 +56,13 @@ LCD_A		=    $80EE
 LCD_BUFFER_POINT    =   $80F1
 LCD_DELETE_CHAR     =   $80F2 ; start 0, if delete = ff
 
-LCD_BUFFER          =   $8100
-LCD_BUFFER_END      =   $8150
+LCD_OFFSET          =   $80F3
 
-LCD_BUFFER_SIZE     =   $50 ;   0 - 80
+LCD_BUFFER          =   $8100
+LCD_BUFFER_END      =   $81D2
+
+LCD_BUFFER_SIZE     =   $D2 ;   0 - 210  buffer | ainda não pode ser maior que 255, pq só estamos
+                            ;   verificando o L e não o HL... e tbm o LCD_BUFFER_SIZE é até 255
 
 
 CR              .EQU     0DH            ; enter
@@ -103,8 +106,49 @@ serialInt:
                 PUSH     HL
 
                 IN       A,(porta)
-
+                
                 call delay  ; esse precisa para nao pegar varias vezes o mesmo char, ajustar
+
+
+
+
+
+
+                ; up key = $0b
+                ; down key = $0a
+                cp      $0B         ; if key up
+                JP      NZ, serialInt_check_down ; se nao for key up desvia
+
+                PUSH    AF
+                LD      A, (LCD_OFFSET)
+                CP      $78
+                JP      Z, serialInt_check_down_pop
+                ADD     A, $14                ; tratar se LCD_OFFSET > LCD_BUFFER_END - $14
+                LD      (LCD_OFFSET), A
+                call    show_lcd_screen
+
+serialInt_check_down_pop:              
+                POP     AF
+serialInt_check_down:
+
+
+                cp      $0A         ; if key down
+                jp      NZ, serialInt_continue
+                PUSH    AF
+                ld      a, (LCD_OFFSET)
+                CP      $0
+                JP      Z, serialInt_continue_pop             ; se for 0 não diminuir
+                SUB     $14                   ; tratar se LCD_OFFSET = 0
+                LD      (LCD_OFFSET), A
+                call    show_lcd_screen
+
+serialInt_continue_pop:
+                POP     AF
+serialInt_continue:
+                
+
+
+
 
                 PUSH     AF
                 LD       A,(serBufUsed)
@@ -255,7 +299,7 @@ CORW:
 COLDSTART:     
 				LD        A,'Y'           ; Set the BASIC STARTED flag
                LD        (basicStarted),A
-               JP        $0390           ; Start BASIC COLD
+               JP        $5000           ; Start BASIC COLD
 CHECKWARM:
                CP        'W'
                JR        NZ, CORW
@@ -264,7 +308,7 @@ CHECKWARM:
                RST       08H
                LD        A,$0A
                RST       08H
-               JP        $0393           ; Start BASIC WARM
+               JP        $5003           ; Start BASIC WARM
               
 SIGNON1:       
                .BYTE     "Z80 - Diego Cruz",CR,LF,0
@@ -273,7 +317,10 @@ SIGNON2:
 
 
 
-
+teste_up:
+                .BYTE   "press up key", CR, LF,0
+teste_down:
+                .BYTE   "press down key", CR, LF,0
 
 
 
@@ -301,6 +348,7 @@ init_lcd_screen:
         LD      A, $0
         LD      (LCD_DELETE_CHAR), A
         LD      (LCD_BUFFER_POINT), A       ; reset pointer buffer to zero
+        LD      (LCD_OFFSET), A
         call    clear_lcd_screen
         call    show_lcd_screen
         POP     AF
@@ -335,64 +383,112 @@ shift_lcd_up:
         PUSH    HL
         PUSH    DE
 
+        ; ----------------  remove o cursor da linha  ---------------------
+
         LD      HL, LCD_BUFFER
         LD      A, (LCD_BUFFER_POINT)
         LD      L, A
-        LD      (HL), $1B
+        LD      (HL), ' '
+
+
+        ; ----------------  zera buffer point  --------------------------
 
         LD      A, $00
         LD      (LCD_BUFFER_POINT), A   ; zera buffer size max 20 - LCD 20x4
         
-        LD      HL, LCD_BUFFER_END-$28 ; buffer end menos 40 - source
-        LD      DE, LCD_BUFFER_END-$14 ; buffer end menos 20 - destination
 
-        LD      A, $14                 ; A contem size of line
-copy_line2_to1:
-        PUSH    AF
-        LD      A, (HL)
-        LD      (DE), A
-        POP     AF
-        inc     HL
-        inc     DE
-        dec     A
-        CP      $00
-        JR      NZ, copy_line2_to1
+        ; --------------- invisible lines
+        ;               line -7
+        ;               line -6
+        ;               line -5
+        ;               line -4
+        ;
+        ;               line -3
+        ;               line -2
+        ;               line -1
+        ;               line  0
+        ;  visible
+        ;               line  1
+        ;               line  2
+        ;               line  3
+        ;               line  4
 
-        LD      HL, LCD_BUFFER_END-$3C ; buffer end menos 60 - source
-        LD      DE, LCD_BUFFER_END-$28 ; buffer end menos 40 - destination
+        ; ----------------  copy line -6 to -7  --------------------------
+        LD      DE,     LCD_BUFFER_END-$14      ; copy to
+        LD      HL,     LCD_BUFFER_END-$28      ; copy from
+        LD      A,      $14                     ; copy size
+        call    function_copy
 
-        LD      A, $14                 ; A contem size of line
-copy_line3_to2:
-        PUSH    AF
-        LD      A, (HL)
-        LD      (DE), A
-        POP     AF
-        inc     HL
-        inc     DE
-        dec     A
-        CP      $00
-        JR      NZ, copy_line3_to2
 
-        LD      HL, LCD_BUFFER_END-$50 ; buffer end menos 80 - source
-        LD      DE, LCD_BUFFER_END-$3C ; buffer end menos 60 - destination
+        ; ----------------  copy line -5 to -6  --------------------------
+        LD      DE,     LCD_BUFFER_END-$28      ; copy to
+        LD      HL,     LCD_BUFFER_END-$3C      ; copy from
+        LD      A,      $14                     ; copy size
+        call    function_copy
 
-        LD      A, $14                 ; A contem size of line
-copy_line4_to3:
-        PUSH    AF
-        LD      A, (HL)
-        LD      (DE), A
-        POP     AF
-        inc     HL
-        inc     DE
-        dec     A
-        CP      $00
-        JR      NZ, copy_line4_to3
+        ; ----------------  copy line -4 to -5   --------------------------
+        LD      DE,     LCD_BUFFER_END-$3C      ; copy to
+        LD      HL,     LCD_BUFFER_END-$50      ; copy from
+        LD      A,      $14                     ; copy size
+        call    function_copy
 
-;------- limpa line 4
+        ; ----------------  copy line -3 to -4    --------------------------
+        LD      DE,     LCD_BUFFER_END-$50      ; copy to
+        LD      HL,     LCD_BUFFER_END-$64      ; copy from
+        LD      A,      $14                     ; copy size
+        call    function_copy
+
+
+        ; ----------------  copy line -2 to -3    --------------------------
+        LD      DE,     LCD_BUFFER_END-$64      ; copy to
+        LD      HL,     LCD_BUFFER_END-$78      ; copy from
+        LD      A,      $14                     ; copy size
+        call    function_copy    
+
+
+        ; ----------------  copy line -1 to -2  --------------------------
+        LD      DE,     LCD_BUFFER_END-$78      ; copy to
+        LD      HL,     LCD_BUFFER_END-$8C      ; copy from
+        LD      A,      $14                     ; copy size
+        call    function_copy
+
+
+        ; ----------------  copy line 0 to -1  --------------------------
+        LD      DE,     LCD_BUFFER_END-$8C      ; copy to
+        LD      HL,     LCD_BUFFER_END-$A0      ; copy from
+        LD      A,      $14                     ; copy size
+        call    function_copy
+
+        ; ----------------  copy line 0 to 1  --------------------------
+        LD      DE,     LCD_BUFFER_END-$A0      ; copy to
+        LD      HL,     LCD_BUFFER_END-$B4      ; copy from
+        LD      A,      $14                     ; copy size
+        call    function_copy
+
+        ; ----------------  copy line 1 to 2  --------------------------
+        LD      DE,     LCD_BUFFER_END-$B4      ; copy to
+        LD      HL,     LCD_BUFFER_END-$C8      ; copy from
+        LD      A,      $14                     ; copy size
+        call    function_copy
+
+        ; ----------------  copy line 2 to 3  --------------------------
+        LD      DE,     LCD_BUFFER_END-$C8      ; copy to
+        LD      HL,     LCD_BUFFER_END-$DC      ; copy from :)
+        LD      A,      $14                     ; copy size
+        call    function_copy
+
+        ; ----------------  copy line 3 to 4  --------------------------
+        LD      DE,     LCD_BUFFER_END-$DC      ; copy to
+        LD      HL,     LCD_BUFFER_END-$F0      ; copy from
+        LD      A,      $14                     ; copy size
+        call    function_copy
+
+        ; ----------------  clear line 4  --------------------------
         LD      HL, LCD_BUFFER
         LD      A,  $14 ; 20
 limpa_line4:
-        LD      (HL), $1B           ; char espace
+        LD      (HL), ' '
+
         INC     HL
         DEC     A
         CP      $00
@@ -402,6 +498,25 @@ limpa_line4:
         POP     HL
         POP     AF
 
+        RET
+
+; =======================================================================
+;                               FUNCAO COPY
+;   A  = size of byte to copy
+;   HL = from address
+;   DE = to address 
+;   
+; =======================================================================
+function_copy:
+        PUSH    AF
+        LD      A, (HL)
+        LD      (DE), A
+        POP     AF
+        inc     HL
+        inc     DE
+        dec     A
+        CP      $00
+        JR      NZ, function_copy
         RET
 
 ; =======================================================================
@@ -484,10 +599,19 @@ continue_print:
 show_lcd_screen:
         PUSH    AF
         PUSH    HL
+        PUSH    DE
+
         LD      HL, LCD_BUFFER
+        LD      A,  (LCD_OFFSET)
+        ADD     A, L
+        LD      L, A
 
         LD      A, lcd_line4
-        call lcd_send_command
+        call    lcd_send_command
+
+        LD      A, (LCD_OFFSET) 
+        ADD     A, $14
+        LD      D, A           
 
 print_line4:
         LD      A, (HL)
@@ -495,45 +619,59 @@ print_line4:
         LD      A, L
         inc     A
         inc     HL
-        CP      $14 ; 20
+        CP      D
         JR      NZ, print_line4
 
         ;  vai para linha 3
         LD      A, lcd_line3
         call    lcd_send_command
+
+        LD      A, D
+        ADD     A, $14
+        LD      D, A
 print_line3:
         LD      A, (HL)
         call    lcd_send_data
         LD      A, L
         inc     A
         inc     HL
-        CP      $28 ; 40
+        CP      D
         JR      NZ, print_line3
 
         ;   vai para a linha 2
         LD      A, lcd_line2
         call    lcd_send_command
+
+        LD      A, D
+        ADD     A, $14
+        LD      D, A
 print_line2:
         LD      A, (HL)
         call    lcd_send_data
         LD      A, L
         inc     A
         inc     HL
-        CP      $3C ; 60
+        CP      D
         JR      NZ, print_line2
 
         ;   vai para a linha 1
         LD      A, lcd_line1
         call    lcd_send_command
+
+        LD      A, D
+        ADD     A, $14
+        LD      D, A
 print_line1:
         LD      A, (HL)
         call    lcd_send_data
         LD      A, L
         inc     A
         inc     HL
-        CP      $50 ; 80
+        CP      D
         JR      NZ, print_line1
+teste:
 
+        POP     DE
         POP     HL
         POP     AF
         RET

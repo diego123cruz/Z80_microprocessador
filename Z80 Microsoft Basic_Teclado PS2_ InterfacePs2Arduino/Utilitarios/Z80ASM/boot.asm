@@ -129,8 +129,6 @@ notWrap:
                 LD       (serBufUsed),A
                 CP       SER_FULLSIZE
                 JR       C,rts0
-                ;LD       A,RTS_HIGH
-                ;OUT      ($80),A
 rts0:           
 				POP      HL
                 POP      AF
@@ -152,7 +150,6 @@ waitForChar:
                 LD       HL,serBuf
 notRdWrap:      
 				DI         ; disable int
-                ; CRUZ call delay
 
                 LD       (serRdPtr),HL
                 LD       A,(serBufUsed)
@@ -160,8 +157,7 @@ notRdWrap:
                 LD       (serBufUsed),A
                 CP       SER_EMPTYSIZE
                 JR       NC,rts1
-                ;LD       A,RTS_LOW
-                ;OUT      ($80),A
+
 rts1:
                 LD       A,(HL)
                 EI
@@ -271,15 +267,31 @@ CHECKWARM:
                JP        $0393           ; Start BASIC WARM
               
 SIGNON1:       
-			    ;.BYTE     CS
-               ;.BYTE     "Z80 SBC By Grant Searle",CR,LF,0
                .BYTE     "Z80 - Diego Cruz",CR,LF,0
 SIGNON2:       
-				;.BYTE     CR,LF
                .BYTE     "(C)old or (W)arm? ",0
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+; =======================================================================
+;
+;                        DISPLAY LOGICO
+;
+; =======================================================================
 
 ; =======================================================================
 ; Inicia LCD screen
@@ -323,6 +335,10 @@ shift_lcd_up:
         PUSH    HL
         PUSH    DE
 
+        LD      HL, LCD_BUFFER
+        LD      A, (LCD_BUFFER_POINT)
+        LD      L, A
+        LD      (HL), $1B
 
         LD      A, $00
         LD      (LCD_BUFFER_POINT), A   ; zera buffer size max 20 - LCD 20x4
@@ -342,9 +358,6 @@ copy_line2_to1:
         CP      $00
         JR      NZ, copy_line2_to1
 
-
-
-
         LD      HL, LCD_BUFFER_END-$3C ; buffer end menos 60 - source
         LD      DE, LCD_BUFFER_END-$28 ; buffer end menos 40 - destination
 
@@ -359,9 +372,6 @@ copy_line3_to2:
         dec     A
         CP      $00
         JR      NZ, copy_line3_to2
-
-
-
 
         LD      HL, LCD_BUFFER_END-$50 ; buffer end menos 80 - source
         LD      DE, LCD_BUFFER_END-$3C ; buffer end menos 60 - destination
@@ -378,7 +388,6 @@ copy_line4_to3:
         CP      $00
         JR      NZ, copy_line4_to3
 
-
 ;------- limpa line 4
         LD      HL, LCD_BUFFER
         LD      A,  $14 ; 20
@@ -388,7 +397,6 @@ limpa_line4:
         DEC     A
         CP      $00
         JR      NZ, limpa_line4
-
 
         POP     DE
         POP     HL
@@ -415,8 +423,17 @@ print_to_lcd_screen:
     LD      HL, LCD_BUFFER
     LD      L, A
     LD      (HL), $1B           ; char espace
+
+    INC     HL                  ; coloca _ para mostrar onde esta o cursor
+    LD      (HL), $1B           ; coloca _ para mostrar onde esta o cursor
+
     LD      A, $0
     LD      (LCD_DELETE_CHAR), A
+
+    DEC     HL           ; coloca _ para mostrar onde esta o cursor
+    LD      A, '_'       ; coloca _ para mostrar onde esta o cursor
+    LD      (HL), A      ; coloca _ para mostrar onde esta o cursor
+
     POP     AF
     POP     HL
     RET
@@ -453,6 +470,9 @@ continue_print:
     INC     HL
     LD      A, L
     LD      (LCD_BUFFER_POINT), A
+
+    LD      A, '_'       ; coloca _ para mostrar onde esta o cursor
+    LD      (HL), A      ; coloca _ para mostrar onde esta o cursor
 
     POP     HL
 
@@ -523,8 +543,20 @@ print_line1:
 
 
 
-               
-;; ---------------------- LCD ----------------------
+
+
+
+
+
+
+
+
+
+;***************************************************************************
+;
+;	                   LCD Display 20x4 - Hardware
+;
+;***************************************************************************
 en	= 01h
 rw	= 02h
 rs	= 04h

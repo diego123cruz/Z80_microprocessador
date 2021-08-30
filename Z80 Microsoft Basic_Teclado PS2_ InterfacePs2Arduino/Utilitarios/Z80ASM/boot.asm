@@ -54,6 +54,7 @@ TEMPSTACK       .EQU     $80ED ; Top of BASIC line input buffer so is "free ram"
 LCD_A		=    $80EE
 
 LCD_BUFFER_POINT    =   $80F1
+LCD_DELETE_CHAR     =   $80F2 ; start 0, if delete = ff
 
 LCD_BUFFER          =   $8100
 LCD_BUFFER_END      =   $8150
@@ -170,6 +171,7 @@ rts1:
 ;------------------------------------------------------------------------------
 TXA:            
 				; CHAR IN A
+                ; out (2), a    ; debug
 ver_enter:       
 
                 ; trata dados para o lcd
@@ -224,7 +226,7 @@ PRINT:
 ;   INIT AFTER RESET
 ;------------------------------------------------------------------------------
 INIT:
-                
+
                LD        HL,TEMPSTACK    ; Temp stack
                LD        SP,HL           ; Set up a temporary stack
                LD        HL,serBuf
@@ -257,7 +259,7 @@ CORW:
 COLDSTART:     
 				LD        A,'Y'           ; Set the BASIC STARTED flag
                LD        (basicStarted),A
-               JP        $6000           ; Start BASIC COLD
+               JP        $0390           ; Start BASIC COLD
 CHECKWARM:
                CP        'W'
                JR        NZ, CORW
@@ -266,7 +268,7 @@ CHECKWARM:
                RST       08H
                LD        A,$0A
                RST       08H
-               JP        $6003           ; Start BASIC WARM
+               JP        $0393           ; Start BASIC WARM
               
 SIGNON1:       
 			    ;.BYTE     CS
@@ -285,6 +287,7 @@ SIGNON2:
 init_lcd_screen:
         PUSH    AF
         LD      A, $0
+        LD      (LCD_DELETE_CHAR), A
         LD      (LCD_BUFFER_POINT), A       ; reset pointer buffer to zero
         call    clear_lcd_screen
         call    show_lcd_screen
@@ -400,7 +403,42 @@ print_to_lcd_screen:
     ; char in register A
     PUSH    HL
     PUSH    AF  ; guarda char
-    
+
+    LD      A, (LCD_DELETE_CHAR)
+    CP      $FF         ; delete char in screen
+    JP      NZ, check_is_delete
+
+    ; delete char
+    LD      A, (LCD_BUFFER_POINT)
+    dec     A
+    LD      (LCD_BUFFER_POINT), A
+    LD      HL, LCD_BUFFER
+    LD      L, A
+    LD      (HL), $1B           ; char espace
+    LD      A, $0
+    LD      (LCD_DELETE_CHAR), A
+    POP     AF
+    POP     HL
+    RET
+
+
+
+check_is_delete:
+    POP     AF
+    PUSH    AF
+    CP      $00          ; if $0, delete next char
+    JP      NZ, continue_print
+    LD      A, (LCD_BUFFER_POINT)
+    CP      $0
+    JP      Z, continue_print
+    LD      A, $FF
+    LD      (LCD_DELETE_CHAR), A
+    POP     AF
+    POP     HL
+    RET
+
+
+continue_print:
     LD      A,  (LCD_BUFFER_POINT)
     CP      $14 ; 20
     call    Z,  shift_lcd_up

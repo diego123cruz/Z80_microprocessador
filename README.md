@@ -12,4 +12,5 @@ Teclado (USB + PS2)         -  01h
 OnBoard_In  + AudioTape(B0) -  02h
 OnBoard_Out + AudioTape(B0) -  02h
 
+
 ![Z80 - Main board](https://github.com/diego123cruz/Z80_microprocessador/blob/main/img/main.jpeg)
